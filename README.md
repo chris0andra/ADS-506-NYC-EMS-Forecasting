@@ -49,13 +49,6 @@ The dataset contains weekly emergency incident counts and response-time measurem
 - Build and evaluate response-time forecasting models.
 - Investigate the relationship between incident counts and response times.
 
-## Project Workflow
-
-1. Member 1 prepares and uploads the cleaned dataset.
-2. Members 2 and 3 use the shared cleaned dataset to conduct their analyses independently.
-3. Each member uploads their R/Quarto code, graphs, and findings to GitHub.
-4. The team reviews results and combines findings.
-5. All members contribute to the written report and recorded presentation.
 
 *Responsibilities are preliminary and may be adjusted as the project develops.*
 
