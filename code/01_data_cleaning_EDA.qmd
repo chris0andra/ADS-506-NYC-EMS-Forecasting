@@ -834,6 +834,46 @@ ems_total_ts |>
 
 The annual seasonal plot reveals considerable variation in weekly EMS demand across calendar years. Some years show modest increases during late spring or summer, but the timing and magnitude of these changes are not consistent throughout the study period. A pronounced spike around March–April 2020 reflects an unusual disruption that differs substantially from typical yearly patterns. The plot also shows differences in overall incident levels between years, consistent with the changing long-term trend identified earlier. These findings suggest that annual seasonality may be present but is not visually dominant. Further analysis using STL decomposition is needed to distinguish recurring seasonal variation from longer-term changes and irregular events.
 
+## Examining Autocorrelation in EMS Demand
+
+Autocorrelation is examined to identify relationships between weekly EMS incident counts and previous weeks, including potential annual patterns.
+
+```{r}
+
+# Examine autocorrelation in total weekly EMS incidents
+ems_total_ts |>
+  ACF(Total_Incidents, lag_max = 104) |>
+  autoplot() +
+  scale_x_continuous(
+    breaks = seq(0, 104, 13),
+    labels = seq(0, 104, 13)
+  ) +
+  labs(
+    title = "Autocorrelation of Weekly NYC EMS Demand",
+    x = "Lag (Weeks)",
+    y = "Autocorrelation"
+  ) +
+  theme_minimal()
+
+
+```
+
+The ACF shows strong positive autocorrelation at short lags, followed by a gradual decline, suggesting persistent changes in weekly EMS demand and possible nonstationarity. No distinct annual peak appears around lag 52, consistent with the weak seasonality identified in the full-period STL analysis.
+
+## Assessing Stationarity in EMS Demand
+
+A KPSS test is used to assess whether weekly EMS demand is stationary during the training period.
+
+```{r}
+# Test stationarity using only the training period
+ems_total_ts |>
+  filter(Week <= as.Date("2025-09-15")) |>
+  features(Total_Incidents, unitroot_kpss)
+
+```
+
+The KPSS test rejects the null hypothesis of level stationarity (statistic = 1.294, p-value at or below 0.01), providing evidence that weekly EMS demand is nonstationary during the training period. This is consistent with the slowly declining autocorrelation observed in the ACF plot and suggests that differencing may be needed for ARIMA forecasting.
+
 ## STL Decomposition of Total EMS Demand
 
 ```{r}
@@ -1046,7 +1086,7 @@ ggplot(
     title = "Annual Seasonal Strength of NYC EMS Demand",
     subtitle = "Full Historical Period vs. Recent Period",
     x = "Emergency Category",
-    y = "Seasonal Strength (0–1)",
+    y = "Seasonal Strength (0-1)",
     fill = "Period"
   ) +
   theme_minimal() +
@@ -1135,16 +1175,18 @@ Comparing correlations across historical periods revealed changes in the relatio
 
 ## Summary of EDA Findings and Implications for Forecasting
 
-| Finding | Evidence | Implication for forecasting |
+| Finding | Evidence | Implication for Forecasting |
 |------------------------|------------------------|------------------------|
-| Changing long-term demand | Growth before 2020, followed by disruption and recovery | Models should account for changes in demand over time |
-| Stronger recent seasonality | Recent seasonal strength: 0.407–0.470, compared with approximately 0.08 historically | Evaluate seasonal and nonseasonal forecasting models |
-| Major historical disruptions | Large incident-count spikes and declines around 2020 | Consider how unusual events affect model performance |
-| Different emergency categories | Life-threatening and non-life-threatening incidents have different demand trends | Category-specific forecasting may provide additional insights |
-| Increasing arrival times | Particularly pronounced for non-life-threatening incidents during 2025–2026 | Response times should be analyzed separately from incident demand |
-| Changing demand–response relationships | Recent correlations: +0.350 for life-threatening and −0.310 for non-life-threatening incidents | Incident volume alone may not adequately explain response times |
+| Changing long-term demand | Growth before 2020, followed by disruption and recovery | Account for changes in demand over time |
+| Stronger recent seasonality | Recent seasonal strength: 0.407–0.470, versus approximately 0.08 historically | Compare seasonal and nonseasonal models |
+| Historical disruptions | Major incident-count changes around 2020 | Consider unusual events when evaluating models |
+| Different emergency categories | Life-threatening and non-life-threatening incidents show different patterns | Consider category-specific forecasts |
+| Increasing arrival times | Especially for non-life-threatening incidents in 2025–2026 | Model response times separately from demand |
+| Changing demand–response relationships | Recent correlations: +0.350 and −0.310 by category | Incident volume alone may not explain response times |
+| Persistent autocorrelation | ACF gradually declines across weekly lags | Account for dependence between observations |
+| Nonstationary training demand | KPSS statistic = 1.294, p-value at or below 0.01 | Assess differencing for ARIMA models |
 
-The exploratory time-series analysis identified changing long-term trends, recurring annual seasonality, and substantial historical disruptions in NYC EMS demand. Seasonal patterns were more distinguishable during the recent 2022–2026 period than across the full historical dataset, suggesting that the choice of training period may influence forecasting results. Differences between life-threatening and non-life-threatening emergencies were also observed in both demand patterns and response times. In particular, recent increases in call-to-arrival times were not consistently accompanied by increases in incident volumes. These findings support evaluating multiple forecasting approaches, comparing performance on chronological testing data, and analyzing emergency categories separately when appropriate. The exploratory results provide a foundation for subsequent demand and response-time modeling but do not establish causal relationships.
+NYC EMS demand shows changing long-term trends, historical disruptions, and more distinguishable seasonality in recent years. The ACF indicates persistent autocorrelation, while the training-period KPSS test provides evidence of nonstationarity. These findings support evaluating different forecasting approaches while accounting for emergency category differences and historical changes.
 
 # Reproducibility and Team Handoff
 
@@ -1236,25 +1278,23 @@ The cleaned master dataset, `ems_weekly_clean.csv`, contains 670 consecutive wee
 
 The following considerations should guide subsequent modeling:
 
-- **Total EMS demand:** The `Total_Incidents` column appears twice per week because the dataset contains two classified emergency categories. Extract one total per week to avoid double-counting.
+- **Total EMS demand:** `Total_Incidents` appears twice per week because the dataset contains two emergency categories. Select one total per week to avoid double-counting.
 
-- **Emergency categories:** Use `Category` to distinguish life-threatening and non-life-threatening emergencies when developing category-specific models.
+- **Emergency categories:** Use `Category` to distinguish life-threatening and non-life-threatening emergencies for category-specific forecasts.
 
-- **Response times:** `Arrival_Seconds` is measured in seconds, while `Dispatch_Minutes` and `Travel_Minutes` are measured in minutes. Convert measurements when necessary to maintain consistent units.
+- **Response times:** `Arrival_Seconds` is measured in seconds, while `Dispatch_Minutes` and `Travel_Minutes` are measured in minutes. Convert units when necessary.
 
 - **Final reporting week:** September 21, 2026, was provisionally excluded due to possible incomplete reporting. This has not been confirmed as a reporting error.
 
-- **Forecasting evaluation:** Use chronological training and testing periods rather than randomly splitting weekly observations. Both modeling sections will use the same chronological training and testing dates
+- **Forecasting evaluation:** Use chronological training and testing periods rather than a random split. Both forecasting analyses should use the same dates.
 
-The cleaned dataset has not been divided into training and testing subsets. The chronological split is performed in 02_train_test_split.qmd before forecasting begins.
+- **Stationarity:** The training-period KPSS test found evidence of nonstationarity in total weekly EMS demand (statistic = 1.294, p-value at or below 0.01). The forecasting team should assess whether differencing is appropriate for ARIMA models.
+
+The chronological training and testing split is documented separately in `02_train_test_split.qmd`. This preserves the cleaned master dataset while providing consistent training and testing periods for both forecasting analyses.
 
 # Conclusion
 
-The exploratory analysis found that NYC EMS demand increased during the earlier years of the dataset, experienced a major disruption around 2020, and has remained relatively stable in recent years. Non-life-threatening emergencies generally accounted for more incidents than life-threatening emergencies.
-
-Annual seasonality was weak across the full historical period but more distinguishable during 2022–2026. These differences suggest that historical disruptions and the choice of training period may influence forecasting results.
-
-Overall, the cleaned dataset provides a reliable foundation for forecasting EMS demand and response times. The next stage of the project will evaluate forecasting models and determine how accurately future demand and response times can be predicted.
+NYC EMS demand increased during the earlier years, experienced major disruptions around 2020, and showed relatively stable incident volumes in recent years. Seasonal patterns were more distinguishable in the recent period, while ACF and KPSS analyses indicated persistent autocorrelation and nonstationarity. The cleaned and validated dataset provides a foundation for forecasting EMS demand and response times.
 
 # AI Assistance Disclosure
 
