@@ -1,0 +1,28 @@
+---
+title: "NYC EMS Demand Forecasting"
+author: "Daniel Lopez"
+format: html
+editor: visual
+---
+
+## 
+
+```{r}
+library(tidyverse)
+library(fpp3)
+```
+
+```{r}
+ems_train <- read_csv(
+  "../data/processed/ems_train.csv",
+  show_col_types = FALSE
+)
+
+ems_test <- read_csv(
+  "../data/processed/ems_test.csv",
+  show_col_types = FALSE
+)
+
+glimpse(ems_train)
+glimpse(ems_test)
+```
