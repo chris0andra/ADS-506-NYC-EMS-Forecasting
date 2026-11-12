@@ -15,14 +15,111 @@ library(fpp3)
 ```{r}
 ems_train <- read_csv(
   "../data/processed/ems_train.csv",
-  show_col_types = FALSE
-)
+  show_col_types = FALSE)
 
 ems_test <- read_csv(
   "../data/processed/ems_test.csv",
-  show_col_types = FALSE
-)
+  show_col_types = FALSE)
 
 glimpse(ems_train)
 glimpse(ems_test)
 ```
+
+```{r}
+ntl_train <- ems_train |>
+  filter(Category == "Non-Life-Threatening") |>
+  select(Week, Incidents) |>
+  as_tsibble(index = Week)
+
+ntl_test <- ems_test |>
+  filter(Category == "Non-Life-Threatening") |>
+  select(Week, Incidents) |>
+  as_tsibble(index = Week)
+
+ntl_train
+ntl_test
+```
+
+```{r}
+ntl_train |>
+  autoplot(Incidents) +
+  labs(
+    title = "Weekly Non-Life-Threatening EMS Incidents",
+    x = "Week",
+    y = "Incidents")
+```
+
+```{r}
+ntl_train |>
+  features(Incidents, unitroot_ndiffs)
+
+ntl_train |>
+  features(Incidents, unitroot_nsdiffs)
+```
+
+```{r}
+ntl_train |>
+  mutate(
+    diff_incidents = difference(Incidents)
+  ) |>
+  gg_tsdisplay(
+    diff_incidents,
+    plot_type = "partial")
+```
+
+The differencing tests suggested one regular difference and no seasonal difference. After differencing, the strongest ACF and PACF relationships appeared at the first lag, so I compared simple ARIMA (1,1,0) and ARIMA (0,1,1) models with an auto selected ARIMA model.
+
+```{r}
+manual_fit <- ntl_train |>
+  model(
+    AR1 = ARIMA(Incidents ~ pdq(1, 1, 0)),
+    MA1 = ARIMA(Incidents ~ pdq(0, 1, 1)),
+    Auto = ARIMA(Incidents))
+```
+
+```{r}
+manual_fit
+```
+
+```{r}
+glance(manual_fit) |>
+  select(.model, AIC, AICc, BIC) |>
+  arrange(AICc)
+```
+
+```{r}
+ntl_fc <- manual_fit |>
+  forecast(new_data = ntl_test)
+
+ntl_accuracy <- accuracy(ntl_fc, ntl_test) |>
+  select(.model, RMSE, MAE, MAPE) |>
+  arrange(RMSE)
+
+ntl_accuracy
+```
+
+```{r}
+ntl_fc |>
+  autoplot(
+    ntl_train |> filter_index("2023 Jan" ~ .),
+    level = NULL
+  ) +
+  autolayer(
+    ntl_test,
+    Incidents
+  ) +
+  labs(
+    title = "Non-Life-Threatening EMS Demand: Actual vs. Forecast",
+    x = "Week",
+    y = "Incidents")
+```
+
+```{r}
+manual_fit |>
+  select(MA1) |>
+  gg_tsresiduals()
+```
+
+The residuals are generally centered around zero, with most autocorrelations remaining within the significance bounds. There are a few larger residuals, especially around 2020, which likely reflect unusual changes in EMS demand during that period. Overall, the residual diagnostics do not show a strong remaining pattern, so the ARIMA (0,1,1) model appears reasonable for forecasting.
+
+The ARIMA (0,1,1) model performed best on the test data, with an RMSE of 714.8, MAE of 644.5, and MAPE of 5.61%. Although the auto selected ARIMA (2,1,2) had the lowest AICc on the training data, it performed worse on the test period. For this test period, the simpler model provided better forecasts on new data. Overall, weekly non-life threatening EMS demand appears reasonably predictable, although larger shifts in demand are still difficult for the model to capture.
