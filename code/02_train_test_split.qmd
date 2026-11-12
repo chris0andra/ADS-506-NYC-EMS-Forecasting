@@ -1,0 +1,146 @@
+---
+title: "NYC EMS: Training and Testing Data Preparation"
+author: "Christopher Andra"
+format:
+  html:
+    toc: true
+    code-fold: true
+  pdf:
+    toc: true
+    number-sections: false
+    geometry:
+      - margin=1in
+execute:
+  warning: false
+  message: false
+---
+
+## 
+
+# Training and Testing Data Preparation
+
+## Purpose
+
+This document establishes a consistent chronological training and testing split for the NYC EMS forecasting project. The same testing period will be used for incident-demand and response-time forecasting so that all models are evaluated over the same historical weeks.
+
+The cleaned master dataset contains 670 consecutive weeks of EMS observations from November 18, 2013, through September 14, 2026.
+
+We will reserve the final 52 weeks for testing and use the preceding 618 weeks for model training and validation. All observations will remain in their original chronological order.
+
+The cleaned master dataset will remain unchanged.
+
+```{r}
+
+# Load packages for data preparation
+library(fpp3)
+library(here)
+
+# Import the cleaned EMS dataset
+ems_data <- readr::read_csv(
+  here::here("data", "processed", "ems_weekly_clean.csv"),
+  show_col_types = FALSE
+)
+
+# Examine the dataset structure
+glimpse(ems_data)
+
+```
+
+## Creating the Training and Testing Split
+
+```{r}
+
+# Define the cutoff dates
+train_end <- as.Date("2025-09-15")
+test_start <- as.Date("2025-09-22")
+
+# Create the training dataset
+ems_train <- ems_data |>
+  filter(Week <= train_end)
+
+# Create the testing dataset
+ems_test <- ems_data |>
+  filter(Week >= test_start)
+
+# Verify the number of rows and weeks in each dataset
+tibble(
+  Dataset = c("Training", "Testing"),
+  Records = c(nrow(ems_train), nrow(ems_test)),
+  Weeks = c(
+    n_distinct(ems_train$Week),
+    n_distinct(ems_test$Week)
+  ),
+  First_Week = c(
+    min(ems_train$Week),
+    min(ems_test$Week)
+  ),
+  Last_Week = c(
+    max(ems_train$Week),
+    max(ems_test$Week)
+  )
+)
+
+```
+
+## Validating the Training and Testing Split
+
+```{r}
+
+# Verify that the split preserves all original records
+tibble(
+  Check = c(
+    "All records accounted for",
+    "No overlapping weeks",
+    "No duplicate week-category combinations",
+    "No missing values",
+    "Each dataset has consecutive weeks"
+  ),
+  Passed = c(
+    nrow(ems_train) + nrow(ems_test) == nrow(ems_data),
+    length(intersect(ems_train$Week, ems_test$Week)) == 0,
+    !anyDuplicated(ems_train[c("Week", "Category")]) &&
+      !anyDuplicated(ems_test[c("Week", "Category")]),
+    !anyNA(ems_train) && !anyNA(ems_test),
+    all(diff(sort(unique(ems_train$Week))) == 7) &&
+      all(diff(sort(unique(ems_test$Week))) == 7)
+  )
+)
+
+```
+
+## Exporting the Training and Testing Datasets
+
+```{r}
+
+# Export the training dataset
+readr::write_csv(
+  ems_train,
+  here::here("data", "processed", "ems_train.csv")
+)
+
+# Export the testing dataset
+readr::write_csv(
+  ems_test,
+  here::here("data", "processed", "ems_test.csv")
+)
+
+# Confirm that both files were created
+tibble(
+  File = c("ems_train.csv", "ems_test.csv"),
+  Exists = c(
+    file.exists(here::here("data", "processed", "ems_train.csv")),
+    file.exists(here::here("data", "processed", "ems_test.csv"))
+  )
+)
+
+```
+
+## Summary and Modeling Handoff
+
+The cleaned NYC EMS dataset was divided chronologically into training and testing periods to support consistent forecasting across the team. The training dataset contains 618 weeks (1,236 observations) from November 18, 2013, through September 15, 2025. The testing dataset contains the final 52 weeks (104 observations), from September 22, 2025, through September 14, 2026.
+
+All five validation checks passed, confirming that the split preserved the original observations without introducing missing values, duplicate week-category combinations, overlapping dates, or gaps in the weekly series.
+
+Both datasets retain the same seven variables as the cleaned master dataset. These files will be used for incident-demand and response-time forecasting, ensuring that both modeling sections are evaluated against the same historical period.
+
+The master dataset remains unchanged. Model selection and tuning should use only the training data, reserving the testing period for final evaluation. The team will separately establish the forecast horizon and validation procedure.
