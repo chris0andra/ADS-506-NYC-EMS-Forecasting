@@ -29,6 +29,11 @@ glimpse(ems_test)
 
 The forecasting analysis focuses on three views of EMS demand: total weekly incidents, life-threatening incidents, and non-life-threatening incidents. This allows the overall demand forecast to be compared with the two emergency categories.
 
+Total weekly EMS demand is calculated by summing life-threatening and
+non-life-threatening incidents. The 23 unclassified incidents identified
+during data cleaning are excluded to maintain consistency with the
+category-level analysis.
+
 ```{r}
 category_train <- ems_train |>
   select(Week, Category, Incidents) |>
