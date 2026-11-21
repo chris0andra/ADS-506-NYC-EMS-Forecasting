@@ -6,7 +6,7 @@ format:
   html:
     toc: true
     toc-depth: 3
-    code-fold: true
+    code-fold: false
   pdf:
     toc: true
     toc-depth: 2
@@ -28,7 +28,7 @@ Emergency medical services (EMS) must respond to changing demand while maintaini
 
 ## Project Objectives
 
-The goal of this project is to apply time-series analysis and forecasting methods to NYC emergency medical services data.
+This project aims to apply time-series analysis and forecasting methods to NYC emergency medical services data.
 
 The specific objectives are to:
 
@@ -36,7 +36,7 @@ The specific objectives are to:
 
 2.  Forecast total weekly EMS incidents and compare demand patterns between life-threatening and non-life-threatening emergencies.
 
-3.  Analyze historical response-time patterns and develop forecasts of weekly average response times.
+3.  Analyze historical response-time patterns and forecast weekly average response times.
 
 4.  Evaluate forecasting performance and discuss how the results could support emergency service planning.
 
@@ -50,7 +50,7 @@ The findings are intended to support operational planning rather than predict in
 
 ## Data Source and Overview
 
-The dataset used in this project is the **NYC 911 End-to-End Data**, obtained from NYC Open Data.
+This project uses the **NYC 911 End-to-End Data**, obtained from NYC Open Data.
 
 **Source:** <https://data.cityofnewyork.us/Public-Safety/911-End-to-End-Data/t7p9-n9dy>
 
@@ -58,7 +58,7 @@ The dataset contains weekly emergency incident counts and response-time measurem
 
 Our analysis will focus specifically on EMS incidents, including life-threatening and non-life-threatening medical emergencies.
 
-The original dataset will be preserved, and a cleaned version will be prepared for time-series analysis and forecasting.
+We will preserve the original dataset and prepare a cleaned version for time-series analysis and forecasting.
 
 ## Loading Required Libraries
 
@@ -97,7 +97,7 @@ names(ems_raw)[c(6, 8)]
 
 ```
 
-The initial CSV import identified two parsing issues in a single record, involving numeric values containing thousands separators. The affected variables were Call to PD Calltaker Handoff and Call to FDNY Job Creation. These issues were investigated further in Investigating CSV Parsing Issues subsection, where they were traced to an FDNY record outside the scope of the EMS analysis. Consequently, no corrections to these measurements were necessary for the cleaned EMS dataset.
+The initial CSV import identified two parsing issues in a single record, involving numeric values containing thousands separators. The affected variables were Call to PD Calltaker Handoff and Call to FDNY Job Creation. These issues were investigated further in the Investigating CSV Parsing Issues subsection, where they were traced to an FDNY record outside the scope of the EMS analysis. Consequently, no corrections to these measurements were necessary for the cleaned EMS dataset.
 
 ## Dataset Structure and Description
 
@@ -133,7 +133,7 @@ ems_raw |>
 
 ```
 
-The original NYC 911 dataset contains records from four emergency service agency groups: EMS, FDNY, NYPD, and NYPD (Non-CIP). This project focuses specifically on EMS-reported medical emergency demand and call-to-arrival times. Therefore, only records classified under the EMS agency were selected for analysis.
+The original NYC 911 dataset contains records from four emergency service agency groups: EMS, FDNY, NYPD, and NYPD (Non-CIP). This project focuses specifically on EMS-reported medical emergency demand and call-to-arrival times. Therefore, we selected only records classified under the EMS agency for analysis.
 
 Although FDNY also reports medical emergencies, combining its records with EMS observations could introduce overlapping incident counts and differences in agency-specific reporting practices. NYPD records were excluded because they represent police-related emergency activity rather than the medical emergency demand being forecasted.
 
@@ -141,7 +141,7 @@ This filtering decision maintains a consistent definition of EMS demand througho
 
 The NYC 911 dataset contains 12,327 records and 30 variables, covering November 18, 2013, through September 21, 2026. All records contain valid dates.
 
-The dataset includes four emergency service agency groups. Our analysis will focus on the 1,364 EMS records, consisting of 671 observations for each of the two primary emergency categories and 22 records with missing incident classifications. These unclassified records will be examined during the data quality assessment.
+The dataset includes four emergency service agency groups. Our analysis will focus on 1,364 EMS records: 671 observations for each of the two primary emergency categories and 22 records with missing incident classifications. These unclassified records will be examined during the data quality assessment.
 
 # Data Quality Assessment
 
@@ -189,7 +189,7 @@ ems_raw |>
 
 ```
 
-The missing-value assessment identified 22 records with missing emergency classifications and one record with a missing average dispatch time. No missing values were found in the dates, incident counts, call-to-arrival times, or average travel times. Overall, the EMS data show a high level of completeness for the variables relevant to our forecasting objectives.
+The missing-value assessment identified 22 records missing emergency classifications and one record missing average dispatch time. No missing values were found in the dates, incident counts, call-to-arrival times, or average travel times. Overall, the EMS data show high completeness for the variables relevant to our forecasting objectives.
 
 ## Investigating the Missing Dispatch Time
 
@@ -315,7 +315,7 @@ ems_raw |>
 
 ```
 
-The time-series plots reveal several notable changes in weekly EMS demand. Life-threatening emergencies increased during the early years of the dataset, followed by relatively stable demand before a pronounced spike around 2020. Non-life-threatening incidents also show an increase in earlier years and a substantial disruption around 2020. These changes coincide with the COVID-19 pandemic, although additional evidence would be needed to establish the causes. Both categories show an unusual decline near the end of the dataset, raising the possibility of incomplete reporting. These observations will be investigated before determining whether any records should be excluded from the forecasting dataset.
+The time-series plots reveal several notable changes in weekly EMS demand. Life-threatening emergencies increased in the early years of the dataset, then remained relatively stable before a pronounced spike around 2020. Non-life-threatening incidents also increased in earlier years and showed a substantial disruption around 2020. These changes coincide with the COVID-19 pandemic, although additional evidence would be needed to establish the causes. Both categories show an unusual decline near the end of the dataset, raising the possibility of incomplete reporting. We will investigate these observations before determining whether any records should be excluded from the forecasting dataset.
 
 ```{r}
 
@@ -338,7 +338,7 @@ ems_raw |>
 
 ```
 
-The final reporting week, September 21, 2026, shows an unusually large decline in EMS incidents compared with the preceding week. Life-threatening incidents decreased by approximately 22.2%, while non-life-threatening incidents decreased by 15.1%, resulting in an overall decline of approximately 18.5%. Because both categories declined simultaneously during the final available week, the observation may reflect incomplete reporting. The final week will be provisionally excluded from the forecasting dataset to reduce the risk of modeling incomplete data. This exclusion is based on a data-quality concern rather than confirmed evidence of incomplete reporting.
+The final reporting week, September 21, 2026, shows an unusually large decline in EMS incidents compared with the preceding week. Life-threatening incidents decreased by approximately 22.2%, while non-life-threatening incidents decreased by 15.1%, resulting in an overall decline of approximately 18.5%. Because both categories declined simultaneously during the final available week, the observation may reflect incomplete reporting. The final week will be provisionally excluded from the forecasting dataset to reduce the risk of modeling incomplete data. This exclusion reflects a data-quality concern rather than confirmed evidence of incomplete reporting.
 
 ```{r}
 
@@ -395,7 +395,7 @@ ems_raw |>
 
 ```
 
-The response-time analysis reveals substantial differences between life-threatening and non-life-threatening EMS emergencies. Life-threatening emergencies generally have shorter call-to-arrival times, while non-life-threatening emergencies experience longer and more variable response times. Both categories show an upward trend in recent years, with particularly pronounced increases in non-life-threatening response times during 2025–2026. The series also contain several extreme spikes, including observations around 2020. Notably, response times have increased during periods when incident counts appear relatively stable, suggesting that factors beyond demand volume may influence EMS response performance. These findings warrant further investigation before forecasting and should not be interpreted as evidence of specific operational causes.
+The response-time analysis reveals substantial differences between life-threatening and non-life-threatening EMS emergencies. Life-threatening emergencies generally have shorter call-to-arrival times, while non-life-threatening emergencies have longer, more variable response times. Both categories show an upward trend in recent years, with particularly pronounced increases in non-life-threatening response times during 2025–2026. The series also contains several extreme spikes, including observations around 2020. Notably, response times have increased during periods when incident counts appear relatively stable, suggesting that factors beyond demand volume may influence EMS response performance. These findings warrant further investigation before forecasting and should not be interpreted as evidence of specific operational causes.
 
 ```{r}
 
@@ -442,7 +442,7 @@ ems_raw |>
 
 ```
 
-The numerical validation identified no negative or zero incident counts and no negative or zero call-to-arrival times. Additionally, no negative dispatch or travel times were detected. These findings indicate that the key EMS measurements do not contain obvious invalid values based on the conditions tested. The previously identified missing dispatch-time observation remains documented separately. Although these results support the overall quality of the dataset, they do not rule out all possible measurement or reporting errors
+The numerical validation identified no negative or zero incident counts and no negative or zero call-to-arrival times. Additionally, no negative dispatch or travel times were detected. These findings indicate that the key EMS measurements contain no obvious invalid values based on the conditions tested. The previously identified missing dispatch-time observation remains documented separately. Although these results support the overall quality of the dataset, they do not rule out all possible measurement or reporting errors
 
 ## Investigating CSV Parsing Issues
 
@@ -468,7 +468,7 @@ ems_raw |>
 
 ```
 
-The CSV import generated two parsing warnings involving numeric values containing thousands separators. Both warnings occurred in the same source record, affecting columns 6 and 8. These values may have been incorrectly imported as missing because of their formatting. The affected variables and agency will be examined before determining whether corrective action is necessary for the EMS analysis.
+The CSV import generated two parsing warnings involving numeric values containing thousands separators. Both warnings occurred in the same source record and affected columns 6 and 8. These values may have been incorrectly imported as missing because of their formatting. The affected variables and agency will be examined before determining whether corrective action is necessary for the EMS analysis.
 
 ```{r}
 
@@ -491,7 +491,7 @@ The CSV import produced two parsing warnings involving values containing thousan
 
 ## Data Quality Assessment Summary
 
-The data-quality assessment indicates that the NYC EMS dataset is generally suitable for time-series analysis. Both classified emergency categories contain complete weekly observations, with no duplicate records or invalid incident counts identified. A small number of records have missing emergency classifications, while one unclassified record also has a missing dispatch time. Several extreme incident counts and response times were identified but will be retained because they may reflect genuine emergency conditions. Two CSV parsing warnings were traced to an FDNY record and do not affect the primary EMS forecasting variables. The final reporting week remains a potential data-quality concern and will be provisionally excluded from the forecasting dataset. These findings will guide the data-cleaning and preparation procedures in the following section.
+The data-quality assessment indicates that the NYC EMS dataset is generally suitable for time-series analysis. Both classified emergency categories contain complete weekly observations, with no duplicate records or invalid incident counts identified. A small number of records have missing emergency classifications, while one unclassified record also has a missing dispatch time. We identified several extreme incident counts and response times but will retain them because they may reflect genuine emergency conditions. Two CSV parsing warnings were traced to an FDNY record and do not affect the primary EMS forecasting variables. The final reporting week remains a potential data-quality concern and will be provisionally excluded from the forecasting dataset. These findings will guide the data-cleaning and preparation procedures in the following section.
 
 ```{r}
 
@@ -512,13 +512,13 @@ ems_raw |>
 
 ```
 
-The final date validation confirmed that both EMS emergency categories contain 671 consecutive weekly observations, covering November 18, 2013, through September 21, 2026. Both series have identical starting and ending dates, with no missing weeks. This alignment supports consistent comparisons between life-threatening and non-life-threatening incidents and allows the categories to be combined for total weekly EMS demand analysis.
+The final date validation confirmed that both EMS emergency categories contain 671 consecutive weekly observations, covering November 18, 2013, through September 21, 2026. Both series share identical start and end dates, with no missing weeks. This alignment supports consistent comparisons between life-threatening and non-life-threatening incidents and allows combining the categories for total weekly EMS demand analysis.
 
 # Data Cleaning and Preparation
 
 ## Filtering and Standardizing EMS Records
 
-The data preparation process focuses on creating a consistent weekly EMS dataset for forecasting incident demand and analyzing response times. The original NYC 911 dataset will remain unchanged, while the processed data will include only EMS observations and variables relevant to the project. Emergency classifications, dates, and measurement names will be standardized to improve readability and reproducibility. Potentially incomplete reporting periods and unclassified incidents will be handled using the findings from the data-quality assessment.
+The data preparation process focuses on creating a consistent weekly EMS dataset to forecast incident demand and analyze response times. The original NYC 911 dataset will remain unchanged, while the processed data will include only EMS observations and variables relevant to the project. Emergency classifications, dates, and measurement names will be standardized to improve readability and reproducibility. Potentially incomplete reporting periods and unclassified incidents will be handled using the findings from the data-quality assessment.
 
 ```{r}
 
@@ -570,7 +570,7 @@ ems_clean |>
 
 ```
 
-The September 21, 2026, reporting week was provisionally excluded because of a substantial and simultaneous decline in both EMS emergency categories, raising concerns about reporting completeness. This removed two observations and reduced the prepared dataset from 1,364 to 1,362 records. Both classified categories now contain 670 weekly observations, covering November 18, 2013, through September 14, 2026. All 22 unclassified records were retained. The exclusion remains a documented assumption rather than a confirmed reporting error.
+The September 21, 2026, reporting week was provisionally excluded because of a substantial and simultaneous decline in both EMS emergency categories, raising concerns about reporting completeness. This removed two observations and reduced the prepared dataset from 1,364 to 1,362 records. Both classified categories now contain 670 weekly observations, covering November 18, 2013, through September 14, 2026. All 22 unclassified records were retained. The exclusion remains a documented assumption, not a confirmed reporting error.
 
 ## Preparing Classified and Unclassified EMS Records
 
@@ -862,7 +862,7 @@ The ACF shows strong positive autocorrelation at short lags, followed by a gradu
 
 ## Assessing Stationarity in EMS Demand
 
-A KPSS test is used to assess whether weekly EMS demand is stationary during the training period.
+A KPSS test assesses whether weekly EMS demand is stationary during the training period.
 
 ```{r}
 # Test stationarity using only the training period
@@ -897,7 +897,7 @@ ems_stl |>
 
 ```
 
-The robust STL decomposition separated total weekly EMS demand into trend, seasonal, and remainder components. The trend shows substantial growth during the early study period, followed by a decline around 2020–2021 and a subsequent recovery to relatively stable demand in recent years. The seasonal component reveals recurring annual fluctuations of approximately 1,000 incidents above or below the underlying trend, indicating that seasonal patterns are present. The remainder contains a particularly large positive spike around early 2020, reflecting an unusual increase in demand not explained by the estimated trend or seasonality. Overall, the decomposition suggests that both changing trends and annual seasonal variation may be relevant to forecasting EMS demand, although their predictive usefulness must be evaluated using training and testing data.
+The robust STL decomposition separated total weekly EMS demand into trend, seasonal, and remainder components. The trend shows substantial growth during the early study period, followed by a decline around 2020–2021 and a subsequent recovery to relatively stable demand in recent years. The seasonal component shows recurring annual fluctuations of about 1,000 incidents above or below the underlying trend, indicating clear seasonal patterns. The remainder contains a particularly large positive spike around early 2020, reflecting an unusual increase in demand not explained by the estimated trend or seasonality. Overall, the decomposition suggests that both changing trends and annual seasonal variation may be relevant to forecasting EMS demand, although their predictive usefulness must be evaluated using training and testing data.
 
 ## Measuring the Strength of Trend and Seasonality
 
@@ -927,7 +927,7 @@ The STL-based strength measures indicate a moderately strong trend component (0.
 
 ## Comparing Trend and Seasonality by Emergency Category
 
-To determine whether seasonal and trend characteristics differ by emergency classification, separate STL decompositions will be performed for life-threatening and non-life-threatening EMS incidents. The resulting trend and seasonal strength measures will be compared to identify differences that may be relevant to category-specific forecasting.
+To determine whether seasonal and trend characteristics differ by emergency classification, we will perform separate STL decompositions for life-threatening and non-life-threatening EMS incidents. The resulting trend and seasonal strength measures will be compared to identify differences relevant to category-specific forecasting.
 
 ```{r}
 
@@ -967,7 +967,7 @@ ems_category_stl |>
 
 ```
 
-The category-specific STL decompositions reveal differences in the behavior of life-threatening and non-life-threatening EMS incidents. Non-life-threatening emergencies consistently account for higher weekly incident volumes and generally exhibit larger seasonal fluctuations in absolute terms. Both series experienced pronounced disruptions around 2020, followed by periods of recovery. More recently, life-threatening demand has remained relatively stable, while non-life-threatening demand shows a modest decline. The seasonal components indicate recurring annual patterns in both categories, although their relative strengths require further measurement. Large remainder fluctuations around 2020 suggest that unusual events influenced both emergency categories beyond their estimated trends and seasonal patterns.
+The category-specific STL decompositions reveal differences in the behavior of life-threatening and non-life-threatening EMS incidents. Non-life-threatening emergencies consistently account for higher weekly incident volumes and generally exhibit larger seasonal fluctuations in absolute terms. Both series experienced pronounced disruptions around 2020, followed by periods of recovery. More recently, life-threatening demand has remained relatively stable, while non-life-threatening demand has declined modestly. The seasonal components indicate recurring annual patterns in both categories, although their relative strengths require further measurement. Large remainder fluctuations around 2020 suggest that unusual events influenced both emergency categories beyond their estimated trends and seasonal patterns.
 
 ```{r}
 
@@ -993,7 +993,7 @@ ems_category_strength
 
 ```
 
-The category-specific STL analysis identified moderately strong trend components for both life-threatening (0.642) and non-life-threatening (0.631) EMS incidents. Annual seasonal strength was weak in both categories, measuring 0.079 and 0.076, respectively. These results closely resemble the findings for total EMS demand, suggesting that neither category exhibits strong annual seasonality across the full historical period. However, preliminary analysis of the more recent 2022–2026 period suggested stronger seasonal patterns. This difference indicates that seasonal characteristics may vary across historical periods, particularly when major disruptions are included. A consistent recent-period comparison is therefore warranted before drawing conclusions about the relevance of seasonality for forecasting.
+The category-specific STL analysis identified moderately strong trend components for both life-threatening (0.642) and non-life-threatening (0.631) EMS incidents. Annual seasonal strength was weak in both categories, measuring 0.079 and 0.076, respectively. These results closely resemble the findings for total EMS demand, suggesting that neither category exhibits strong annual seasonality across the full historical period. However, preliminary analysis of the more recent 2022–2026 period suggested stronger seasonal patterns. This difference indicates that seasonal characteristics may vary across historical periods, particularly when major disruptions are included. A consistent recent-period comparison is therefore warranted before drawing conclusions about seasonality's relevance for forecasting.
 
 ## Comparing Seasonality Across Historical Periods
 
@@ -1097,7 +1097,207 @@ ggplot(
 
 ```
 
-A comparison of full-period and recent-period STL decompositions revealed substantial differences in estimated annual seasonal strength. Across the full 2013–2026 period, seasonal strength was weak for total EMS demand (0.082), life-threatening incidents (0.079), and non-life-threatening incidents (0.076). However, during the more recent 2022–2026 period, seasonal strength increased to 0.470, 0.432, and 0.407, respectively, indicating more distinguishable annual patterns. Recent-period trend strength was highest for non-life-threatening emergencies (0.514), compared with total EMS demand (0.346) and life-threatening emergencies (0.295). These findings suggest that the characteristics of EMS demand differ across historical periods. The results support evaluating seasonal forecasting approaches and considering alternative training windows, while recognizing that model performance must ultimately be assessed using held-out observations.
+Comparing full-period and recent-period STL decompositions revealed substantial differences in estimated annual seasonal strength. Across the full 2013–2026 period, seasonal strength was weak for total EMS demand (0.082), life-threatening incidents (0.079), and non-life-threatening incidents (0.076). However, during the more recent 2022–2026 period, seasonal strength increased to 0.470, 0.432, and 0.407, respectively, indicating more distinguishable annual patterns. Recent-period trend strength was highest for non-life-threatening emergencies (0.514), compared with total EMS demand (0.346) and life-threatening emergencies (0.295). These findings suggest that EMS demand characteristics differ across historical periods. The results support evaluating seasonal forecasting approaches and considering alternative training windows, while recognizing that model performance must ultimately be assessed using held-out observations.
+
+## Examining Recurring Week-of-Year Patterns
+
+```{r}
+# Compare EMS demand across weeks of the year
+
+# Average EMS demand by week of year
+
+ems_category_ts |>
+  as_tibble() |>
+  mutate(
+    Week_of_Year = lubridate::isoweek(Week)
+  ) |>
+  filter(Week_of_Year <= 52) |>
+  group_by(Category, Week_of_Year) |>
+  summarise(
+    Average_Incidents = mean(Incidents, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  ggplot(aes(
+    x = Week_of_Year,
+    y = Average_Incidents
+  )) +
+  geom_line(color = "steelblue", linewidth = 1) +
+  facet_wrap(~ Category, scales = "free_y") +
+  labs(
+    title = "Average Weekly EMS Demand Throughout the Year",
+    x = "Week of Year",
+    y = "Average Weekly Incidents"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+# Average EMS demand by week of year: 2022-2025
+
+ems_category_ts |>
+  as_tibble() |>
+  filter(
+    Week >= as.Date("2022-01-01"),
+    Week < as.Date("2026-01-01")
+  ) |>
+  mutate(
+    Week_of_Year = lubridate::isoweek(Week)
+  ) |>
+  filter(Week_of_Year <= 52) |>
+  group_by(Category, Week_of_Year) |>
+  summarise(
+    Average_Incidents = mean(Incidents, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  ggplot(aes(
+    x = Week_of_Year,
+    y = Average_Incidents
+  )) +
+  geom_line(color = "steelblue", linewidth = 1) +
+  facet_wrap(~ Category, scales = "free_y") +
+  labs(
+    title = "Annual EMS Demand Patterns: 2022-2025",
+    x = "Week of Year",
+    y = "Average Weekly Incidents"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+# Compare seasonal patterns across individual years
+
+ems_category_ts |>
+  as_tibble() |>
+  filter(
+    Week >= as.Date("2022-01-01"),
+    Week < as.Date("2026-01-01")
+  ) |>
+  mutate(
+    Year = factor(lubridate::year(Week)),
+    Week_of_Year = lubridate::isoweek(Week)
+  ) |>
+  filter(Week_of_Year <= 52) |>
+  ggplot(aes(
+    x = Week_of_Year,
+    y = Incidents,
+    color = Year,
+    group = Year
+  )) +
+  geom_line(linewidth = 0.8, alpha = 0.8) +
+  facet_wrap(~ Category, scales = "free_y") +
+  labs(
+    title = "NYC EMS Demand by Week of Year: 2022–2025",
+    subtitle = "Comparing annual patterns across individual years",
+    x = "Week of Year",
+    y = "Weekly EMS Incidents",
+    color = "Year"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+# Compare response-time patterns across individual years
+
+ems_category_ts |>
+  as_tibble() |>
+  filter(
+    Week >= as.Date("2022-01-01"),
+    Week < as.Date("2026-01-01")
+  ) |>
+  mutate(
+    Year = factor(lubridate::year(Week)),
+    Week_of_Year = lubridate::isoweek(Week),
+    Arrival_Minutes = Arrival_Seconds / 60
+  ) |>
+  filter(Week_of_Year <= 52) |>
+  ggplot(aes(
+    x = Week_of_Year,
+    y = Arrival_Minutes,
+    color = Year,
+    group = Year
+  )) +
+  geom_line(linewidth = 0.8, alpha = 0.8) +
+  facet_wrap(~ Category, scales = "free_y") +
+  labs(
+    title = "NYC EMS Response Times by Week of Year: 2022–2025",
+    subtitle = "Comparing annual patterns across individual years",
+    x = "Week of Year",
+    y = "Average Call-to-Arrival Time (Minutes)",
+    color = "Year"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+# Seasonal strength of EMS call-to-arrival times
+# Full historical period
+
+ems_response_ts <- ems_category_ts |>
+  mutate(Arrival_Minutes = Arrival_Seconds / 60)
+
+response_stl_full <- ems_response_ts |>
+  model(
+    STL(
+      Arrival_Minutes ~ season(period = 52),
+      robust = TRUE
+    )
+  )
+
+response_strength_full <- response_stl_full |>
+  components() |>
+  as_tibble() |>
+  group_by(Category) |>
+  summarise(
+    Seasonal_Strength = max(
+      0,
+      1 - var(remainder, na.rm = TRUE) /
+        var(season_52 + remainder, na.rm = TRUE)
+    ),
+    .groups = "drop"
+  ) |>
+  mutate(Period = "2013-2026")
+
+# Recent historical period
+
+response_stl_recent <- ems_response_ts |>
+  filter(Week >= as.Date("2022-01-03")) |>
+  model(
+    STL(
+      Arrival_Minutes ~ season(period = 52),
+      robust = TRUE
+    )
+  )
+
+response_strength_recent <- response_stl_recent |>
+  components() |>
+  as_tibble() |>
+  group_by(Category) |>
+  summarise(
+    Seasonal_Strength = max(
+      0,
+      1 - var(remainder, na.rm = TRUE) /
+        var(season_52 + remainder, na.rm = TRUE)
+    ),
+    .groups = "drop"
+  ) |>
+  mutate(Period = "2022-2026")
+
+bind_rows(
+  response_strength_full,
+  response_strength_recent
+) |>
+  select(Category, Period, Seasonal_Strength)
+```
+
+### Additional Seasonality Findings
+
+Further analysis examined recurring annual patterns in EMS incident demand and call-to-arrival times. Week-of-year comparisons suggested that emergency demand was generally higher during portions of late spring and summer, although patterns varied across individual years.
+
+STL analysis showed weak annual seasonality across the full historical period. During 2022–2026, estimated seasonal strength was higher for total EMS demand (0.470), life-threatening incidents (0.432), and non-life-threatening incidents (0.407).
+
+Response-time seasonality was also examined. Recent-period seasonal strength was 0.270 for life-threatening emergencies and 0.319 for non-life-threatening emergencies, compared with 0.092 and 0.110 across the full historical period.
+
+These results suggest that annual patterns are more noticeable in the recent data, particularly for incident demand. However, the patterns are not fully consistent across years, and their usefulness for forecasting requires further evaluation.
 
 ## Examining the Relationship Between EMS Demand and Response Times
 
@@ -1179,6 +1379,7 @@ Comparing correlations across historical periods revealed changes in the relatio
 |------------------------|------------------------|------------------------|
 | Changing long-term demand | Growth before 2020, followed by disruption and recovery | Account for changes in demand over time |
 | Stronger recent seasonality | Recent seasonal strength: 0.407–0.470, versus approximately 0.08 historically | Compare seasonal and nonseasonal models |
+| Response-time seasonality | Recent seasonal strength: 0.270 for life-threatening and 0.319 for non-life-threatening response time | Evaluate seasonal forecasting models for response times |
 | Historical disruptions | Major incident-count changes around 2020 | Consider unusual events when evaluating models |
 | Different emergency categories | Life-threatening and non-life-threatening incidents show different patterns | Consider category-specific forecasts |
 | Increasing arrival times | Especially for non-life-threatening incidents in 2025–2026 | Model response times separately from demand |
@@ -1221,11 +1422,11 @@ tibble(
 
 ```
 
-The exported master EMS dataset was independently reimported and compared with the prepared dataset. Validation confirmed that the CSV contains 1,340 observations across 670 reporting weeks, with no missing values. The reimported data also matched the prepared dataset, confirming that the export process preserved its contents. These findings support the reproducibility of the dataset and its use in subsequent forecasting analyses.
+The exported master EMS dataset was independently reimported and compared with the prepared dataset. Validation confirmed that the CSV contains 1,340 observations across 670 reporting weeks and has no missing values. The reimported data also matched the prepared dataset, confirming that the export process preserved its contents. These findings support the dataset's reproducibility and its use in subsequent forecasting analyses.
 
 ## Master Dataset Description and Data Dictionary
 
-The final master dataset, `ems_weekly_clean.csv`, contains seven variables used to analyze weekly EMS incident demand and response times. Each observation represents one emergency classification during a particular reporting week. The variables were standardized to improve readability and facilitate reproducible analysis.
+The final master dataset `ems_weekly_clean.csv`contains seven variables used to analyze weekly EMS incident demand and response times. Each observation represents one emergency classification during a particular reporting week. The variables were standardized to improve readability and facilitate reproducible analysis.
 
 | Variable | Description | Unit |
 |------------------------|------------------------|------------------------|
@@ -1237,7 +1438,7 @@ The final master dataset, `ems_weekly_clean.csv`, contains seven variables used 
 | `Travel_Minutes` | Average time between unit assignment and arrival on scene | Minutes |
 | `Total_Incidents` | Total EMS incidents during the week, including incidents with unknown classifications | Incidents |
 
-The dataset contains two records per week, one for each classified emergency category. Consequently, `Total_Incidents` is repeated twice for every week. When analyzing overall EMS demand, only one weekly total should be used to prevent double-counting.
+The dataset contains two records per week, one for each classified emergency category. Consequently, `Total_Incidents` is repeated after provisionally excluding overall EMS demand; use only one week potentially to prevent double-counting.
 
 The dataset covers November 18, 2013, through September 14, 2026, following the provisional exclusion of the final reporting week due to potential incomplete reporting.
 
@@ -1270,19 +1471,17 @@ The data preparation process followed several documented decisions to preserve v
 
 - **Final reporting week:** September 21, 2026, was provisionally excluded because of an unusual decline in both emergency categories. Reporting incompleteness has not been independently confirmed.
 
-The resulting master dataset preserves the weekly incident counts and response-time measurements for both classified emergency categories. Total weekly demand includes unclassified incidents and is repeated across category rows, requiring users to select one total per week when forecasting overall demand. The original CSV remains unchanged to support reproducibility.
+The resulting master dataset preserves the weekly incident counts and response-time measurements for both classified emergency categories. Total weekly demand includes unclassified incidents and is repeated across category rows, so we select one total per week when forecasting overall demand. The original CSV remains unchanged to support reproducibility.
 
 ## Technical Notes for Forecasting
 
-The cleaned master dataset, `ems_weekly_clean.csv`, contains 670 consecutive weeks of EMS observations from November 18, 2013, through September 14, 2026.
+The cleaned master dataset `ems_weekly_clean.csv`contains 670 consecutive weeks of EMS observations from November 18, 2013, through September 14, 2026.
 
 The following considerations should guide subsequent modeling:
 
 - **Total EMS demand:** `Total_Incidents` appears twice per week because the dataset contains two emergency categories. Select one total per week to avoid double-counting.
 
-- **Emergency categories:** Use `Category` to distinguish life-threatening and non-life-threatening emergencies for category-specific forecasts.
-
-- **Response times:** `Arrival_Seconds` is measured in seconds, while `Dispatch_Minutes` and `Travel_Minutes` are measured in minutes. Convert units when necessary.
+- **Emergency categories:** Use `Category` to distinguish life-threatening and non-life-threatening emergencies for category-specific forecasting. `Arrival_Seconds` is measured in seconds, while `Dispatch_Minutes` and `Travel_Minutes` are measured in minutes. Convert units when necessary.
 
 - **Final reporting week:** September 21, 2026, was provisionally excluded due to possible incomplete reporting. This has not been confirmed as a reporting error.
 
@@ -1298,4 +1497,4 @@ NYC EMS demand increased during the earlier years, experienced major disruptions
 
 # AI Assistance Disclosure
 
-ChatGPT was used to assist with R coding, troubleshooting, checking interpretations, and improving the clarity of written explanations and visualizations. All code and results were reviewed as part of the project.
+ChatGPT assisted with R coding, troubleshooting, checking interpretations, and improving the clarity of written explanations and visualizations. All code and results were reviewed as part of the project.
