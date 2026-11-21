@@ -15,6 +15,7 @@ library(tidyverse)
 library(fpp3)
 library(gt)
 ```
+
 ```{r load-data}
 
 ems_train <- read_csv(
@@ -54,6 +55,7 @@ ntl_manual_fit <- ntl_train |>
 
 ntl_manual_fit
 ```
+
 ## Residual Diagnostics and Transformation
 
 We examined the residual diagnostics to assess the ARIMA (0,1,1) model and determine whether a transformation could improve forecast performance.
@@ -63,11 +65,13 @@ We examined the residual diagnostics to assess the ARIMA (0,1,1) model and deter
 ntl_manual_fit |>
   gg_tsresiduals()
 ```
+
 ```{r calculate_new_Guerrero_lambda}
 
 ntl_train |>
   features(Incidents, guerrero)
 ```
+
 ```{r transformation-models}
 
 transformation_models <- ntl_train |>
@@ -313,5 +317,250 @@ training_window_accuracy |>
 
 **Training Window Comparison.** The full-history model performed a little better across the three accuracy measures. Because the differences were small, restricting the training data to 2022 onward did not improve forecast performance.
 
+## Additional Model Validation: Total and Life-Threatening EMS Demand
+
+```{r}
+# Total weekly EMS demand: ARIMA residual diagnostics
+
+total_train <- ems_train |>
+  group_by(Week) |>
+  summarise(
+    Incidents = sum(Incidents),
+    .groups = "drop"
+  ) |>
+  as_tsibble(index = Week)
+
+total_fit <- total_train |>
+  model(
+    ARIMA = ARIMA(Incidents)
+  )
+
+total_fit |>
+  select(ARIMA) |>
+  gg_tsresiduals()
+```
+
+```{r}
+# Life-threatening EMS demand: ETS residual diagnostics
+
+life_train <- ems_train |>
+  filter(Category == "Life-Threatening") |>
+  select(Week, Incidents) |>
+  as_tsibble(index = Week)
+
+life_fit <- life_train |>
+  model(
+    ETS = ETS(Incidents)
+  )
+
+life_fit |>
+  select(ETS) |>
+  gg_tsresiduals()
+```
+
+```{r}
+# Ljung-Box tests for the selected demand models
+
+total_lb <- total_fit |>
+  select(ARIMA) |>
+  augment() |>
+  features(.innov, ljung_box, lag = 20) |>
+  mutate(Forecast_Target = "Total EMS Demand")
+
+life_lb <- life_fit |>
+  select(ETS) |>
+  augment() |>
+  features(.innov, ljung_box, lag = 20) |>
+  mutate(Forecast_Target = "Life-Threatening Demand")
+
+bind_rows(total_lb, life_lb) |>
+  select(Forecast_Target, .model, lb_stat, lb_pvalue)
+```
+
+### Additional Model Validation Interpretation
+
+Residual diagnostics and Ljung–Box tests were conducted for the selected total-demand ARIMA and life-threatening ETS models. At lag 20, the total-demand ARIMA model showed no statistically significant remaining autocorrelation (p = 0.773), suggesting that it captured most of the historical time-dependent patterns. In contrast, the life-threatening ETS model showed significant remaining autocorrelation (p \< 0.001), indicating that some patterns were not fully captured.
+
+Although the ETS model had less favorable residual diagnostics, it achieved the lowest forecast error for life-threatening demand on the 52-week test set in the main model comparison. These findings highlight the importance of considering both residual diagnostics and out-of-sample forecast accuracy when evaluating forecasting models.
+
+## Extended Rolling-Origin Cross-Validation
+
+```{r}
+# Rolling-origin cross-validation: Total EMS Demand
+# Compare ARIMA and ETS using one-week-ahead forecasts
+
+total_cv <- total_train |>
+  stretch_tsibble(.init = 260, .step = 13)
+
+total_cv_fit <- total_cv |>
+  model(
+    ARIMA = ARIMA(Incidents),
+    ETS = ETS(Incidents)
+  )
+
+total_cv_fc <- total_cv_fit |>
+  forecast(h = 1)
+
+total_cv_accuracy <- total_cv_fc |>
+  accuracy(total_train) |>
+  select(.model, RMSE, MAE, MAPE) |>
+  arrange(RMSE)
+
+total_cv_accuracy
+```
+
+```{r}
+# Rolling-origin cross-validation by emergency category
+# Compare ARIMA and ETS using one-week-ahead forecasts
+
+category_train <- ems_train |>
+  select(Week, Category, Incidents) |>
+  as_tsibble(key = Category, index = Week)
+
+category_cv <- category_train |>
+  stretch_tsibble(.init = 260, .step = 13)
+
+category_cv_fit <- category_cv |>
+  model(
+    ARIMA = ARIMA(Incidents),
+    ETS = ETS(Incidents)
+  )
+
+category_cv_fc <- category_cv_fit |>
+  forecast(h = 1)
+
+category_cv_accuracy <- category_cv_fc |>
+  accuracy(category_train) |>
+  select(Category, .model, RMSE, MAE, MAPE) |>
+  arrange(Category, RMSE)
+
+category_cv_accuracy
+```
+
+### Extended Cross-Validation Interpretation
+
+Rolling-origin cross-validation compared ARIMA and ETS using one-week-ahead forecasts across three EMS demand targets. ETS achieved lower RMSE, MAE, and MAPE than ARIMA for total demand, life-threatening incidents, and non-life-threatening incidents.
+
+ETS achieved MAPE values of 2.68% for total demand, 3.85% for life-threatening demand, and 2.23% for non-life-threatening demand. These results suggest that ETS was more accurate for short-term demand forecasting across the evaluated historical periods.
+
+However, the original 52-week test-set comparison favored ARIMA for total demand. This difference highlights that forecasting performance can vary with the forecast horizon and evaluation method. Therefore, model selection should consider the intended operational planning horizon rather than relying on a single accuracy measure.
+
+## Future EMS Demand Forecasts
+
+```{r}
+# Prepare complete historical data for future forecasting
+
+ems_full <- bind_rows(ems_train, ems_test) |>
+  arrange(Week, Category)
+
+# Total weekly EMS demand
+total_full <- ems_full |>
+  group_by(Week) |>
+  summarise(
+    Incidents = sum(Incidents),
+    .groups = "drop"
+  ) |>
+  as_tsibble(index = Week)
+
+# Demand by emergency category
+category_full <- ems_full |>
+  select(Week, Category, Incidents) |>
+  as_tsibble(key = Category, index = Week)
+
+# Fit ARIMA and ETS using all available observations
+future_total_models <- total_full |>
+  model(
+    ARIMA = ARIMA(Incidents),
+    ETS = ETS(Incidents)
+  )
+
+future_category_models <- category_full |>
+  model(
+    ARIMA = ARIMA(Incidents),
+    ETS = ETS(Incidents)
+  )
+
+# Verify the fitted models
+future_total_models
+future_category_models
+```
+
+```{r}
+# Future EMS demand forecasts: 52 weeks ahead
+# The first 4 weeks represent the short-term planning horizon
+
+future_total_fc <- future_total_models |>
+  select(ETS) |>
+  forecast(h = 52, level = c(80, 95))
+
+future_category_fc <- future_category_models |>
+  select(ETS) |>
+  forecast(h = 52, level = c(80, 95))
+
+# Display first 4 weeks of future predictions
+future_total_fc |>
+  as_tibble() |>
+  select(Week, .mean) |>
+  slice_head(n = 4)
+
+future_category_fc |>
+  as_tibble() |>
+  group_by(Category) |>
+  slice_head(n = 4) |>
+  ungroup() |>
+  select(Week, Category, .mean)
+```
+
+```{r}
+# Total EMS demand: 52-week forecast with prediction intervals
+
+future_total_fc |>
+  autoplot(
+    total_full |> filter_index("2024 Jan" ~ .),
+    level = c(80, 95)
+  ) +
+  labs(
+    title = "NYC EMS Total Demand: 52-Week Forecast",
+    subtitle = "ETS model with 80% and 95% prediction intervals",
+    x = "Week",
+    y = "Weekly EMS Incidents"
+  )
+```
+
+```{r}
+# Future EMS demand by emergency category
+# 52-week forecasts with 80% and 95% prediction intervals
+
+future_category_fc |>
+  autoplot(
+    category_full |> filter_index("2024 Jan" ~ .),
+    level = c(80, 95)
+  ) +
+  facet_wrap(~ Category, scales = "free_y") +
+  labs(
+    title = "NYC EMS Demand Forecasts by Emergency Category",
+    subtitle = "ETS models with 80% and 95% prediction intervals",
+    x = "Week",
+    y = "Weekly EMS Incidents"
+  )
+```
+
+### Future EMS Demand Forecast Interpretation
+
+Using all available observations through September 14, 2026, the ETS models generated forecasts for the following 52 weeks. Predicted weekly EMS demand was approximately 21,985 total incidents, including 10,630 life-threatening and 11,361 non-life-threatening incidents based on independently fitted models.
+
+The forecasts remained relatively stable across the prediction period, suggesting that the models anticipate demand near recent historical levels. However, the 80% and 95% prediction intervals widened substantially over the 52-week horizon, indicating increasing uncertainty.
+
+These results suggest that short-term forecasts may provide useful estimates for EMS staffing and resource planning, while longer-term forecasts should be interpreted cautiously. Unexpected events, operational changes, and shifts in emergency demand may cause actual incident volumes to differ significantly from the predicted values.
+
+The forecast period begins September 21, 2026, immediately after the final week in the dataset. These predictions represent forecasts beyond the dataset cutoff, rather than a claim that all forecast dates are still in the future.
+
 ## Final Conclusion
-The ARIMA (0,1,1) model performed well without transforming the incident counts. Rolling-origin cross-validation performed well for its short-term forecast, and using the full historical training period gave a slightly better accuracy than just using the recent data.
+
+The forecasting validation compared ARIMA and ETS models across total, life-threatening, and non-life-threatening EMS demand. The original 52-week test-set evaluation favored ARIMA for total demand and ETS for both emergency categories. However, extended rolling-origin cross-validation showed that ETS performed better for all three targets when predicting one week ahead, achieving MAPE values of 2.68%, 3.85%, and 2.23%, respectively.
+
+Additional analysis found that the non-life-threatening ARIMA(0,1,1) model performed best without transforming incident counts, and using the full historical training period produced slightly better results than training only on data from 2022 onward. Residual diagnostics showed no statistically significant remaining autocorrelation for the total-demand ARIMA model (Ljung–Box p = 0.773), while the life-threatening ETS model showed significant remaining autocorrelation (p \< 0.001).
+
+Using all available data through September 14, 2026, the ETS models projected approximately 21,985 total EMS incidents per week, with around 10,630 life-threatening and 11,361 non-life-threatening incidents. These projections remained relatively stable, but their prediction intervals widened considerably over the 52-week forecast horizon.
+
+Overall, the findings show that model accuracy depends on the forecasting target and prediction horizon. Short-term forecasts could support staffing and resource planning, while longer-term forecasts should be used cautiously because uncertainty increases over time. The remaining residual patterns and unexpected changes in EMS demand highlight the importance of regularly updating and evaluating forecasting models.
