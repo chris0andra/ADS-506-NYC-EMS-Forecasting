@@ -171,7 +171,7 @@ ems_train |>
 
 ```
 
-**Interpretation.** Response times showed stronger long-term trends than seasonal patterns. Non-life-threatening incidents showed the largest unusual response-time spikes with major increases in 2020.
+**Interpretation.** Response times showed stronger long-term trends than seasonal patterns during the training period (2013–2025). Annual seasonal strength was 0.223 for life-threatening emergencies and 0.260 for non-life-threatening emergencies. Non-life-threatening incidents also experienced larger unusual response-time spikes, particularly during 2020.
 
 ## 3. Response-Time Forecasting Models
 
@@ -229,7 +229,7 @@ response_accuracy
 ```
 
 ```{r}
-#| include: false
+#| echo: false
 
 # ETS forecasts of EMS Response Times
 ets_fc <- response_fc |>
@@ -264,6 +264,58 @@ ets_fc |>
 ```
 
 **Interpretation.** ETS was the most accurate model for both categories. ETS forecasted life-threatening response times more accurately with a MAPE of 8.39% versus 19.79% for non-life-threatening incidents.
+
+```{r}
+# Check residuals for ETS and ARIMA models
+# ETS residual diagnostics: Life-Threatening emergencies
+
+response_models |>
+  filter(Category == "Life-Threatening") |>
+  select(ETS) |>
+  gg_tsresiduals()
+```
+
+```{r}
+# ETS residual diagnostics: Non-Life-Threatening emergencies
+
+response_models |>
+  filter(Category == "Non-Life-Threatening") |>
+  select(ETS) |>
+  gg_tsresiduals()
+```
+
+```{r}
+# ARIMA residual diagnostics: Life-Threatening emergencies
+
+response_models |>
+  filter(Category == "Life-Threatening") |>
+  select(ARIMA) |>
+  gg_tsresiduals()
+```
+
+```{r}
+# ARIMA residual diagnostics: Non-Life-Threatening emergencies
+
+response_models |>
+  filter(Category == "Non-Life-Threatening") |>
+  select(ARIMA) |>
+  gg_tsresiduals()
+```
+
+```{r}
+# Ljung-Box test for response-time model residuals
+
+response_models |>
+  select(ETS, ARIMA) |>
+  augment() |>
+  features(.innov, ljung_box, lag = 20)
+```
+
+### Residual Diagnostics Interpretation
+
+The Ljung–Box test was conducted at lag 20 to evaluate residual autocorrelation. ARIMA showed no statistically significant remaining autocorrelation for either life-threatening (p = 0.966) or non-life-threatening (p = 0.996) emergencies. In contrast, ETS showed significant remaining autocorrelation for both life-threatening (p = 0.031) and non-life-threatening (p = 0.041) emergencies.
+
+Although ARIMA demonstrated more favorable residual diagnostics, ETS achieved lower forecast errors on the 52-week test set. These findings suggest that ETS provided better out-of-sample accuracy for the evaluated period, while some residual dependence remains. Model selection should therefore consider both forecast accuracy and diagnostic results.
 
 ## 3.1. Rolling-Origin Cross-Validation
 
@@ -402,8 +454,6 @@ response_recent_accuracy <- response_recent_fc |>
 
 ```
 
-**Interpretation.** Using only 2022 onward did not improve forecast accuracy. Thus, the full historical data remained useful for ETS forecasting.
-
 ```{r}
 #| echo: false
 
@@ -452,6 +502,8 @@ response_window_accuracy |>
   )
 
 ```
+
+**Interpretation.** Full-history training produced lower RMSE for both emergency categories. However, recent-history training slightly improved MAPE for non-life-threatening emergencies (18.79% versus 19.79%). Overall, the results were mixed, with no consistent advantage from using only recent data.
 
 ## 4. Incident Counts and Response Times
 
@@ -512,4 +564,4 @@ incident_correlations
 
 ## 5. Response-Time Results
 
-**Takeaway.** Life-threatening incidents had shorter and more consistent Call-to-Arrival times than non-life-threatening incidents. ETS gave the best forecasts for both categories. The cross-validation results also showed lower errors for life-threatening incidents. By using only data from 2022 onward did not improve the forecasts, so keeping the older data was still useful. Higher incident volume was also linked to longer response times with a stronger relationship for life-threatening incidents.
+**Takeaway.** Life-threatening emergencies had shorter and more consistent call-to-arrival times than non-life-threatening emergencies. ETS achieved the lowest forecast errors on the 52-week test set for both categories, although its residual diagnostics showed some remaining autocorrelation. Rolling-origin cross-validation also produced lower forecast errors for life-threatening emergencies. Comparing training periods produced mixed results, with full-history training generally performing better but recent-history training slightly improving MAPE for non-life-threatening emergencies. Incident volume was more strongly associated with response times for life-threatening emergencies.
