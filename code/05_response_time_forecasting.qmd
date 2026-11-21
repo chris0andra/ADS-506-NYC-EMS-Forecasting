@@ -1,0 +1,515 @@
+---
+title: "EMS Response-Time Analysis and Forecasting"
+author: "Danitza Loya"
+format: html
+editor: visual
+execute:
+  warning: false
+  message: false
+---
+
+## Setup and Data Loading
+
+```{r}
+#| include: false
+
+# Load packages
+library(tidyverse)
+library(fpp3)
+library(here)
+library(gt)
+
+```
+
+```{r}
+#| include: false
+
+# Load the training and test datasets
+ems_train <- read_csv(
+  here("data", "processed", "ems_train.csv"),
+  show_col_types = FALSE
+)
+
+ems_test <- read_csv(
+  here("data", "processed", "ems_test.csv"),
+  show_col_types = FALSE
+)
+
+```
+
+```{r}
+#| echo: false
+
+# Check the structure of the training data
+glimpse(ems_train)
+
+```
+
+```{r}
+#| echo: false
+
+# Check the training and test periods
+ems_train |>
+  summarise(
+    First_Week = min(Week),
+    Last_Week = max(Week),
+    Weeks = n_distinct(Week)
+  )
+
+ems_test |>
+  summarise(
+    First_Week = min(Week),
+    Last_Week = max(Week),
+    Weeks = n_distinct(Week)
+  )
+
+```
+
+## 1. Response-Time Trends
+
+```{r}
+#| echo: false
+
+# Plot weekly response times by emergency category
+ggplot(ems_train, aes(
+  x = Week,
+  y = Arrival_Seconds,
+  color = Category
+)) +
+  geom_line(linewidth = 0.7) +
+  labs(
+    title = "Weekly EMS Response Times by Emergency Category",
+    x = "Week",
+    y = "Arrival Time (Seconds)",
+    color = "Emergency Category"
+  ) +
+  theme_minimal()
+
+```
+
+**Interpretation.** On average, response times were shorter for life-threatening incidents at 596 seconds while non-life-threatening incidents averaged 896 seconds. Non-life-threatening response times were also more variable.
+
+```{r}
+#| echo: false
+
+# Calculate mean response time by category
+ems_train |>
+  group_by(Category) |>
+  summarise(
+    Mean_Arrival_Seconds = round(
+      mean(Arrival_Seconds, na.rm = TRUE),
+      2
+    )
+  )
+
+```
+
+## 2. Seasonality and Unusual Changes
+
+```{r}
+#| include: false
+
+# Convert training data to a weekly time series (tsibble)
+ems_train_ts <- ems_train |>
+  as_tsibble(
+    key = Category,
+    index = Week
+  )
+
+```
+
+```{r}
+#| echo: false
+
+# Examine seasonal patterns in arrival times
+ems_train_ts |>
+  gg_season(Arrival_Seconds, period = "year") +
+  labs(
+    title = "Seasonal Pattern of EMS Response Times",
+    y = "Arrival Time (Seconds)"
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+#| echo: false
+
+# Calculate trend and seasonal strength
+stl_features <- ems_train_ts |>
+  features(
+    Arrival_Seconds,
+    feat_stl,
+    .period = 52
+  )
+
+stl_features |>
+  select(
+    Category,
+    trend_strength,
+    seasonal_strength_52
+  ) |>
+  mutate(
+    across(where(is.numeric), ~ round(.x, 3))
+  )
+
+```
+
+```{r}
+#| echo: false
+
+# Identify weeks with the highest response times
+ems_train |>
+  arrange(desc(Arrival_Seconds)) |>
+  select(
+    Week,
+    Category,
+    Arrival_Seconds,
+    Incidents
+  ) |>
+  slice_head(n = 10)
+
+```
+
+**Interpretation.** Response times showed stronger long-term trends than seasonal patterns. Non-life-threatening incidents showed the largest unusual response-time spikes with major increases in 2020.
+
+## 3. Response-Time Forecasting Models
+
+```{r}
+#| include: false
+
+# Convert test data to a weekly tsibble
+ems_test_ts <- ems_test |>
+  as_tsibble(
+    key = Category,
+    index = Week
+  )
+
+```
+
+```{r}
+#| include: false
+
+# Fit response-time forecasting models: Seasonal Naive, ETS and ARIMA
+response_models <- ems_train_ts |>
+  model(
+    Seasonal_Naive = SNAIVE(Arrival_Seconds ~ lag("year")),
+    ETS = ETS(Arrival_Seconds),
+    ARIMA = ARIMA(Arrival_Seconds)
+  )
+
+```
+
+```{r}
+#| include: false
+
+# Forecasts response times for the 52-week test period
+response_fc <- response_models |>
+  forecast(new_data = ems_test_ts)
+
+```
+
+```{r}
+#| echo: false
+
+# Compare forecast model accuracy on the test data
+response_accuracy <- response_fc |>
+  accuracy(ems_test_ts) |>
+  select(
+    Category,
+    .model,
+    RMSE,
+    MAE,
+    MAPE
+  ) |>
+  arrange(Category, RMSE)
+
+response_accuracy
+
+```
+
+```{r}
+#| include: false
+
+# ETS forecasts of EMS Response Times
+ets_fc <- response_fc |>
+  filter(.model == "ETS")
+
+# Show recent history, ETS forecasts, and actual test values
+ets_fc |>
+  autoplot(
+    ems_train_ts |>
+      filter(Week >= as.Date("2023-01-01")),
+    level = c(80, 95)
+  ) +
+  autolayer(
+    ems_test_ts,
+    Arrival_Seconds,
+    color = "black",
+    linewidth = 0.8
+  ) +
+  facet_wrap(
+    ~ Category,
+    scales = "free_y",
+    ncol = 1
+  ) +
+  labs(
+    title = "ETS Forecasts of EMS Response Times",
+    subtitle = "Forecasts compared with actual response times in the 52-week test period",
+    x = "Week",
+    y = "Arrival Time (Seconds)"
+  ) +
+  theme_minimal()
+
+```
+
+**Interpretation.** ETS was the most accurate model for both categories. ETS forecasted life-threatening response times more accurately with a MAPE of 8.39% versus 19.79% for non-life-threatening incidents.
+
+## 3.1. Rolling-Origin Cross-Validation
+
+```{r}
+#| echo: false
+
+# Run rolling-origin cross-validation for the ETS model
+response_cv <- ems_train_ts |>
+  stretch_tsibble(
+    .init = 260,
+    .step = 13
+  )
+
+response_cv_fit <- response_cv |>
+  model(
+    ETS = ETS(Arrival_Seconds)
+  )
+
+response_cv_fc <- response_cv_fit |>
+  forecast(h = 1)
+
+response_cv_accuracy <- response_cv_fc |>
+  accuracy(
+    ems_train_ts,
+    by = c("Category", ".model")
+  ) |>
+  select(Category, .model, RMSE, MAE, MAPE)
+
+response_cv_accuracy
+
+```
+
+```{r}
+#| include: false
+
+# Calculate forecast errors for each CV period
+response_cv_results <- response_cv_fc |>
+  as_tibble() |>
+  left_join(
+    ems_train_ts |>
+      as_tibble() |>
+      select(
+        Week,
+        Category,
+        Actual = Arrival_Seconds
+      ),
+    by = c("Week", "Category")
+  ) |>
+  mutate(
+    Error = Actual - .mean,
+    Absolute_Error = abs(Error),
+    APE = abs(Error / Actual) * 100
+  )
+
+```
+
+```{r}
+#| include: false
+
+# Keep valid cross-validation results
+response_cv_results_valid <- response_cv_results |>
+  filter(
+    !is.na(Actual),
+    is.finite(APE)
+  )
+
+```
+
+```{r}
+#| echo: false
+
+# Plot rolling-origin forecast errors over time
+response_cv_results_valid |>
+  ggplot(aes(x = Week, y = APE, color = Category)) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 2) +
+  facet_wrap(
+    ~ Category,
+    ncol = 1,
+    scales = "free_y"
+  ) +
+  labs(
+    title = "Rolling-Origin Cross-Validation of EMS Response Times",
+    subtitle = "One-week-ahead ETS forecast errors across 28 forecast periods",
+    x = "Forecast Week",
+    y = "Absolute Percentage Error (%)",
+    color = "Emergency Category"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "none"
+  )
+
+```
+
+**Interpretation.** Rolling-origin validation showed that ETS performed well across different periods. Forecast errors stayed low for life-threatening incidents with a MAPE of 3.19% compared to 7.38%.
+
+## 3.2 Full History vs. Recent Training Window
+
+```{r}
+#| include: false
+
+# Create the 2022-onward training dataset
+response_train_recent <- ems_train_ts |>
+  filter(Week >= as.Date("2022-01-01"))
+
+```
+
+```{r}
+#| include: false
+
+# Fit ETS using the recent training period
+response_recent_fit <- response_train_recent |>
+  model(
+    ETS = ETS(Arrival_Seconds)
+  )
+
+```
+
+```{r}
+#| include: false
+
+# Forecast the test period using the recent-history ETS model
+response_recent_fc <- response_recent_fit |>
+  forecast(new_data = ems_test_ts)
+
+```
+
+```{r}
+#| echo: false
+
+# Calculate recent-history ETS forecast accuracy
+response_recent_accuracy <- response_recent_fc |>
+  accuracy(ems_test_ts) |>
+  select(Category, .model, RMSE, MAE, MAPE)
+
+```
+
+**Interpretation.** Using only 2022 onward did not improve forecast accuracy. Thus, the full historical data remained useful for ETS forecasting.
+
+```{r}
+#| echo: false
+
+# Compare full-history and recent-history ETS accuracy
+response_window_accuracy <- bind_rows(
+  response_accuracy |>
+    filter(.model == "ETS") |>
+    mutate(Training_Window = "Full History (2013-2025)"),
+  
+  response_recent_accuracy |>
+    mutate(Training_Window = "Recent History (2022-2025)")
+) |>
+  select(
+    Category,
+    Training_Window,
+    RMSE,
+    MAE,
+    MAPE
+  )
+
+response_window_accuracy |>
+  gt::gt() |>
+  gt::tab_header(
+    title = "ETS Response-Time Accuracy by Training Window",
+    subtitle = "Life-Threatening vs. Non-Life-Threatening EMS Incidents"
+  ) |>
+  gt::cols_label(
+    Category = "Emergency Category",
+    Training_Window = "Training Window",
+    RMSE = "RMSE",
+    MAE = "MAE",
+    MAPE = "MAPE"
+  ) |>
+  gt::fmt_number(
+    columns = c(RMSE, MAE),
+    decimals = 2
+  ) |>
+  gt::fmt_number(
+    columns = MAPE,
+    decimals = 2,
+    pattern = "{x}%"
+  ) |>
+  gt::cols_align(
+    align = "center",
+    columns = everything()
+  )
+
+```
+
+## 4. Incident Counts and Response Times
+
+```{r}
+#| echo: false
+
+# Plot the relationship between incident volume and response time
+ggplot(
+  ems_train,
+  aes(
+    x = Incidents,
+    y = Arrival_Seconds,
+    color = Category
+  )
+) +
+  geom_point(alpha = 0.35) +
+  geom_smooth(
+    method = "lm",
+    se = TRUE
+  ) +
+  facet_wrap(
+    ~ Category,
+    scales = "free"
+  ) +
+  labs(
+    title = "Incident Counts and EMS Response Times",
+    subtitle = "Weekly observations from the training period",
+    x = "Weekly Incident Count",
+    y = "Arrival Time (Seconds)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+```
+
+```{r}
+#| echo: false
+
+# Calculate the correlation by emergency category
+incident_correlations <- ems_train |>
+  group_by(Category) |>
+  summarise(
+    Correlation = cor(
+      Incidents,
+      Arrival_Seconds,
+      use = "complete.obs"
+    )
+  ) |>
+  mutate(
+    Correlation = round(Correlation, 3)
+  )
+
+incident_correlations
+
+```
+
+**Interpretation.** Higher incident volume was associated with longer response times for life-threatening incidents (r = 0.501). The relationship was weaker for non-life-threatening incidents (r = 0.233).
+
+## 5. Response-Time Results
+
+**Takeaway.** Life-threatening incidents had shorter and more consistent Call-to-Arrival times than non-life-threatening incidents. ETS gave the best forecasts for both categories. The cross-validation results also showed lower errors for life-threatening incidents. By using only data from 2022 onward did not improve the forecasts, so keeping the older data was still useful. Higher incident volume was also linked to longer response times with a stronger relationship for life-threatening incidents.

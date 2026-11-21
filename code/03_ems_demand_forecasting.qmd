@@ -1,0 +1,250 @@
+---
+title: "NYC EMS Demand Forecasting"
+author: "Daniel Lopez"
+format: html
+editor: visual
+---
+
+## Setup
+
+```{r}
+library(tidyverse)
+library(fpp3)
+```
+
+```{r}
+ems_train <- read_csv(
+  "../data/processed/ems_train.csv",
+  show_col_types = FALSE)
+
+ems_test <- read_csv(
+  "../data/processed/ems_test.csv",
+  show_col_types = FALSE)
+
+glimpse(ems_train)
+glimpse(ems_test)
+```
+
+## Prepare Weekly Demand Series
+
+The forecasting analysis focuses on three views of EMS demand: total weekly incidents, life-threatening incidents, and non-life-threatening incidents. This allows the overall demand forecast to be compared with the two emergency categories.
+
+Total weekly EMS demand is calculated by summing life-threatening and
+non-life-threatening incidents. The 23 unclassified incidents identified
+during data cleaning are excluded to maintain consistency with the
+category-level analysis.
+
+```{r}
+category_train <- ems_train |>
+  select(Week, Category, Incidents) |>
+  as_tsibble(key = Category, index = Week)
+
+category_test <- ems_test |>
+  select(Week, Category, Incidents) |>
+  as_tsibble(key = Category, index = Week)
+
+total_train <- ems_train |>
+  group_by(Week) |>
+  summarise(Incidents = sum(Incidents), .groups = "drop") |>
+  as_tsibble(index = Week)
+
+total_test <- ems_test |>
+  group_by(Week) |>
+  summarise(Incidents = sum(Incidents), .groups = "drop") |>
+  as_tsibble(index = Week)
+```
+
+```{r}
+category_train |>
+  autoplot(Incidents) +
+  labs(
+    title = "Weekly NYC EMS Demand by Emergency Category",
+    x = "Week",
+    y = "Incidents",
+    color = "Category")
+```
+
+The two emergency categories follow many of the same broad changes over time, but their weekly volumes and variability differ. Forecasting the categories separately makes it possible to evaluate whether one type of EMS demand is more predictable than the other.
+
+## Initial ARIMA Analysis: Non-Life-Threatening Demand
+
+The initial ARIMA analysis focused on non-life threatening incidents. This section is retained because it provides a detailed comparison of candidate ARIMA specifications before expanding the analysis to total demand and both emergency categories.
+
+```{r}
+ntl_train <- category_train |>
+  filter(Category == "Non-Life-Threatening") |>
+  select(Week, Incidents)
+
+ntl_test <- category_test |>
+  filter(Category == "Non-Life-Threatening") |>
+  select(Week, Incidents)
+```
+
+```{r}
+ntl_train |>
+  autoplot(Incidents) +
+  labs(
+    title = "Weekly Non-Life-Threatening EMS Incidents",
+    x = "Week",
+    y = "Incidents")
+```
+
+```{r}
+ntl_train |>
+  features(Incidents, unitroot_ndiffs)
+
+ntl_train |>
+  features(Incidents, unitroot_nsdiffs)
+```
+
+```{r}
+ntl_train |>
+  mutate(
+    diff_incidents = difference(Incidents)
+  ) |>
+  gg_tsdisplay(
+    diff_incidents,
+    plot_type = "partial")
+```
+
+The differencing tests suggested one regular difference and no seasonal difference. After differencing, the strongest ACF and PACF relationships appeared at the first lag, so I compared simple ARIMA(1,1,0) and ARIMA(0,1,1) models with an automatically selected ARIMA model.
+
+```{r}
+manual_fit <- ntl_train |>
+  model(
+    AR1 = ARIMA(Incidents ~ pdq(1, 1, 0)),
+    MA1 = ARIMA(Incidents ~ pdq(0, 1, 1)),
+    Auto = ARIMA(Incidents))
+```
+
+```{r}
+glance(manual_fit) |>
+  select(.model, AIC, AICc, BIC) |>
+  arrange(AICc)
+```
+
+```{r}
+ntl_fc <- manual_fit |>
+  forecast(new_data = ntl_test)
+
+ntl_accuracy <- accuracy(ntl_fc, ntl_test) |>
+  select(.model, RMSE, MAE, MAPE) |>
+  arrange(RMSE)
+
+ntl_accuracy
+```
+
+```{r}
+ntl_fc |>
+  autoplot(
+    ntl_train |> filter_index("2023 Jan" ~ .),
+    level = NULL
+  ) +
+  autolayer(
+    ntl_test,
+    Incidents
+  ) +
+  labs(
+    title = "Non-Life-Threatening EMS Demand: Actual vs. Forecast",
+    x = "Week",
+    y = "Incidents")
+```
+
+```{r}
+manual_fit |>
+  select(MA1) |>
+  gg_tsresiduals()
+```
+
+The residuals are generally centered around zero, with most autocorrelations remaining within the significance bounds. There are a few larger residuals, especially around 2020, which likely reflect unusual changes in EMS demand during that period. Overall, the residual diagnostics do not show a strong remaining pattern, so the ARIMA (0,1,1) model appears reasonable for forecasting.
+
+The ARIMA (0,1,1) model performed best on the test data, with an RMSE of 714.8, MAE of 644.5, and MAPE of 5.61%. Although the automatically selected ARIMA (2,1,2) model had the lowest AICc on the training data, it performed worse during the test period. For this holdout period, the simpler model provided better forecasts on new data.
+
+## Total Weekly EMS Demand: ARIMA vs. ETS
+
+To address the broader project objective, I next modeled total weekly EMS incidents. ARIMA and ETS were compared so the analysis was not limited to a single model family.
+
+```{r}
+total_fit <- total_train |>
+  model(
+    ARIMA = ARIMA(Incidents),
+    ETS = ETS(Incidents))
+
+total_fit
+```
+
+```{r}
+total_fc <- total_fit |>
+  forecast(new_data = total_test)
+
+total_accuracy <- accuracy(total_fc, total_test) |>
+  select(.model, RMSE, MAE, MAPE) |>
+  arrange(RMSE)
+
+total_accuracy
+```
+
+```{r}
+total_fc |>
+  autoplot(
+    total_train |> filter_index("2023 Jan" ~ .),
+    level = NULL
+  ) +
+  autolayer(
+    total_test,
+    Incidents
+  ) +
+  labs(
+    title = "Total Weekly EMS Demand: Actual vs. Forecast",
+    x = "Week",
+    y = "Incidents")
+```
+
+The total demand comparison shows which model family provides the most accurate forecasts for overall EMS volume. Evaluating both ARIMA and ETS on the same 52 week test period provides a more direct measure of forecasting performance than relying only on training set fit statistics.
+
+## Life-Threatening vs. Non-Life-Threatening Demand
+
+The final comparison evaluates ARIMA and ETS separately for each emergency category. This makes it possible to determine whether forecast accuracy differs between life threatening and non-life threatening EMS demand.
+
+```{r}
+category_fit <- category_train |>
+  model(
+    ARIMA = ARIMA(Incidents),
+    ETS = ETS(Incidents))
+
+category_fit
+```
+
+```{r}
+category_fc <- category_fit |>
+  forecast(new_data = category_test)
+
+category_accuracy <- accuracy(category_fc, category_test) |>
+  select(Category, .model, RMSE, MAE, MAPE) |>
+  arrange(Category, RMSE)
+
+category_accuracy
+```
+
+```{r}
+category_fc |>
+  autoplot(
+    category_train |> filter_index("2023 Jan" ~ .),
+    level = NULL
+  ) +
+  autolayer(
+    category_test,
+    Incidents
+  ) +
+  facet_wrap(~ Category, scales = "free_y") +
+  labs(
+    title = "EMS Demand Forecasts by Emergency Category",
+    x = "Week",
+    y = "Incidents")
+```
+
+## Forecasting Takeaways
+
+The expanded analysis addresses the project question from three perspectives: total weekly EMS demand, life-threatening demand, and non-life-threatening demand. The original non-life threatening ARIMA analysis showed that a relatively simple ARIMA (0,1,1) model could outperform a more complex automatically selected ARIMA model on unseen data. Comparing ARIMA with ETS for total demand and for each emergency category provides a broader test of whether future EMS demand can be forecast reliably.
+
+The final interpretation should focus on the test-set accuracy results above. In particular, the comparison can show whether one model family consistently performs better and whether one emergency category is easier to forecast than the other. These differences are important operationally because more reliable demand forecasts could support staffing and resource planning, while categories with larger forecast errors may require additional flexibility when allocating EMS resources.

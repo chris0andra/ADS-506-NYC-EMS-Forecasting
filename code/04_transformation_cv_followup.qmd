@@ -1,0 +1,317 @@
+---
+title: "04_transformation_cv_followup.qmd"
+author: "Danitza Loya"
+format: html
+editor: visual
+---
+
+## Setup and Data Preparation
+
+```{r packages}
+#| message: false
+#| warning: false
+
+library(tidyverse)
+library(fpp3)
+library(gt)
+```
+```{r load-data}
+
+ems_train <- read_csv(
+  "../data/processed/ems_train.csv",
+  show_col_types = FALSE
+)
+
+ems_test <- read_csv(
+  "../data/processed/ems_test.csv",
+  show_col_types = FALSE
+)
+```
+
+```{r prepare-ntl-data}
+
+ntl_train <- ems_train |>
+  filter(Category == "Non-Life-Threatening") |>
+  select(Week, Incidents) |>
+  as_tsibble(index = Week)
+
+ntl_test <- ems_test |>
+  filter(Category == "Non-Life-Threatening") |>
+  select(Week, Incidents) |>
+  as_tsibble(index = Week)
+```
+
+## ARIMA Model
+
+```{r fit-arima}
+
+ntl_manual_fit <- ntl_train |>
+  model(
+    Manual_ARIMA = ARIMA(
+      Incidents ~ pdq(0, 1, 1)
+    )
+  )
+
+ntl_manual_fit
+```
+## Residual Diagnostics and Transformation
+
+We examined the residual diagnostics to assess the ARIMA (0,1,1) model and determine whether a transformation could improve forecast performance.
+
+```{r residual_diagnostics}
+
+ntl_manual_fit |>
+  gg_tsresiduals()
+```
+```{r calculate_new_Guerrero_lambda}
+
+ntl_train |>
+  features(Incidents, guerrero)
+```
+```{r transformation-models}
+
+transformation_models <- ntl_train |>
+  model(
+    Original = ARIMA(Incidents ~ pdq(0, 1, 1)),
+    Log = ARIMA(log(Incidents) ~ pdq(0, 1, 1)),
+    Sqrt = ARIMA(sqrt(Incidents) ~ pdq(0, 1, 1))
+  )
+```
+
+```{r transformation-accuracy}
+#| results: hide
+
+transformation_fc <- transformation_models |>
+  forecast(new_data = ntl_test)
+
+transformation_accuracy <- transformation_fc |>
+  accuracy(data = ntl_test) |>
+  select(.model, RMSE, MAE, MAPE) |>
+  arrange(RMSE)
+```
+
+```{r transformation_comparison_table}
+
+transformation_accuracy |>
+  mutate(
+    .model = recode(
+      .model,
+      "Original" = "Original Scale",
+      "Sqrt" = "Square Root",
+      "Log" = "Log"
+    )
+  ) |>
+  gt() |>
+  tab_header(
+    title = "Transformation Forecast Accuracy",
+    subtitle = "Non-Life-Threatening EMS Incidents: ARIMA (0,1,1)"
+  ) |>
+  cols_label(
+    .model = "Transformation",
+    RMSE = "RMSE",
+    MAE = "MAE",
+    MAPE = "MAPE"
+  ) |>
+  fmt_number(
+    columns = c(RMSE, MAE),
+    decimals = 2
+  ) |>
+  fmt_number(
+    columns = MAPE,
+    decimals = 2,
+    pattern = "{x}%"
+  ) |>
+  cols_align(
+    align = "center",
+    columns = everything()
+  )
+```
+
+**Transformation Decision.** The original scale produced the lowest forecast errors (RMSE = 714.84, MAE = 644.52 and MAPE = 5.61%). Thus, no transformation was applied to the final ARIMA (0,1,1) model.
+
+## Cross-Validation
+
+```{r rolling_cross_validation}
+
+ntl_cv <- ntl_train |>
+  stretch_tsibble(.init = 260,.step = 13)
+```
+
+```{r fit_ARIMA(0,1,1)_to_each_window}
+
+ntl_cv_fit <- ntl_cv |>
+  model(
+    Manual_ARIMA = ARIMA(
+      Incidents ~ pdq(0, 1, 1)
+    )
+  )
+
+ntl_cv_fc <- ntl_cv_fit |>
+  forecast(h = 1)
+
+ntl_cv_accuracy <- ntl_cv_fc |>
+  accuracy(ntl_train)
+```
+
+```{r match_each_cv_forecast_with_actual_incident_count}
+
+ntl_cv_results <- ntl_cv_fc |>
+  as_tibble() |>
+  left_join(
+    ntl_train |>
+      as_tibble() |>
+      select(Week, Actual = Incidents),
+    by = "Week"
+  ) |>
+  mutate(
+    Error = Actual - .mean,
+    Absolute_Error = abs(Error),
+    APE = abs(Error / Actual) * 100
+  )
+```
+
+```{r remove_only_forecasts_without_actual_observatoin}
+
+ntl_cv_results_valid <- ntl_cv_results |>
+  filter(!is.na(Actual), is.finite(APE))
+```
+
+```{r create_professional_cv_plot}
+
+ntl_cv_results_valid |>
+  ggplot(aes(x = Week, y = APE)) +
+  geom_line(color = "#0072B2", linewidth = 0.7) +
+  geom_point(color = "#0072B2", size = 2) +
+  labs(
+    title = "Rolling-Origin Cross-Validation Performance",
+    subtitle = "Non-Life-Threatening EMS Incidents: ARIMA (0,1,1)",
+    x = "Forecast Week",
+    y = "Absolute Percentage Error (%)"
+  ) +
+  theme_minimal(base_size = 12)
+```
+
+```{r rolling-origin_cross-validation_table}
+
+ntl_cv_accuracy |>
+  select(.model, RMSE, MAE, MAPE) |>
+  mutate(
+    .model = recode(
+      .model,
+      "Manual_ARIMA" = "ARIMA (0,1,1)"
+    )
+  ) |>
+  gt() |>
+  tab_header(
+    title = "Rolling-Origin Cross-Validation Accuracy",
+    subtitle = "Non-Life-Threatening EMS Incidents"
+  ) |>
+  cols_label(
+    .model = "Model",
+    RMSE = "RMSE",
+    MAE = "MAE",
+    MAPE = "MAPE"
+  ) |>
+  fmt_number(
+    columns = c(RMSE, MAE),
+    decimals = 2
+  ) |>
+  fmt_number(
+    columns = MAPE,
+    decimals = 2,
+    pattern = "{x}%"
+  ) |>
+  cols_align(
+    align = "center",
+    columns = everything()
+  )
+```
+
+**Cross-Validation Performance.** Rolling-origin cross-validation produced an RMSE of 406.84, MAE of 281.23, and MAPE of 2.27%. To summarize, the ARIMA (0,1,1) maintained low one-week-ahead forecast errors across the evaluated historical periods.
+
+## Training Window Comparison
+
+```{r training-window-models}
+
+ntl_train_recent <- ntl_train |>
+  filter_index("2022 Jan" ~ .)
+
+full_history_fit <- ntl_train |>
+  model(
+    Full_History = ARIMA(
+      Incidents ~ pdq(0, 1, 1)
+    )
+  )
+
+recent_history_fit <- ntl_train_recent |>
+  model(
+    Recent_History = ARIMA(
+      Incidents ~ pdq(0, 1, 1)
+    )
+  )
+```
+
+```{r training-window-forecasts}
+
+full_history_fc <- full_history_fit |>
+  forecast(new_data = ntl_test)
+
+recent_history_fc <- recent_history_fit |>
+  forecast(new_data = ntl_test)
+```
+
+```{r training-window-accuracy}
+
+full_history_accuracy <- full_history_fc |>
+  accuracy(ntl_test) |>
+  select(.model, RMSE, MAE, MAPE)
+
+recent_history_accuracy <- recent_history_fc |>
+  accuracy(ntl_test) |>
+  select(.model, RMSE, MAE, MAPE)
+```
+
+```{r combine-training-window-results}
+
+training_window_accuracy <- bind_rows(
+  full_history_accuracy |>
+    mutate(Training_Window = "Full History"),
+  recent_history_accuracy |>
+    mutate(Training_Window = "Recent History (2022 onward)")
+) |>
+  select(Training_Window, RMSE, MAE, MAPE)
+```
+
+```{r training-window-table}
+
+training_window_accuracy |>
+  gt() |>
+  tab_header(
+    title = "Forecast Accuracy by Training Window",
+    subtitle = "Non-Life-Threatening EMS Incidents: ARIMA (0,1,1)"
+  ) |>
+  cols_label(
+    Training_Window = "Training Window",
+    RMSE = "RMSE",
+    MAE = "MAE",
+    MAPE = "MAPE"
+  ) |>
+  fmt_number(
+    columns = c(RMSE, MAE),
+    decimals = 2
+  ) |>
+  fmt_number(
+    columns = MAPE,
+    decimals = 2,
+    pattern = "{x}%"
+  ) |>
+  cols_align(
+    align = "center",
+    columns = everything()
+  )
+```
+
+**Training Window Comparison.** The full-history model performed a little better across the three accuracy measures. Because the differences were small, restricting the training data to 2022 onward did not improve forecast performance.
+
+## Final Conclusion
+The ARIMA (0,1,1) model performed well without transforming the incident counts. Rolling-origin cross-validation performed well for its short-term forecast, and using the full historical training period gave a slightly better accuracy than just using the recent data.
