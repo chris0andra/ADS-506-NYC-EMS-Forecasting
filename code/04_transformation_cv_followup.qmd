@@ -447,6 +447,8 @@ However, the original 52-week test-set comparison favored ARIMA for total demand
 
 ## Future EMS Demand Forecasts
 
+We use ETS for the demand projections because it had the lowest one-week-ahead cross-validation errors for all three demand series. We highlight the first four forecast weeks for near-term staffing discussions and show the full 52 weeks to illustrate how uncertainty grows over time. For classified total demand, ARIMA performed best on the 52-week holdout.
+
 ```{r}
 # Prepare complete historical data for future forecasting
 
