@@ -379,7 +379,7 @@ bind_rows(total_lb, life_lb) |>
 
 ### Additional Model Validation Interpretation
 
-Residual diagnostics and Ljung–Box tests were conducted for the selected total-demand ARIMA and life-threatening ETS models. At lag 20, the total-demand ARIMA model showed no statistically significant remaining autocorrelation (p = 0.773), suggesting that it captured most of the historical time-dependent patterns. In contrast, the life-threatening ETS model showed significant remaining autocorrelation (p \< 0.001), indicating that some patterns were not fully captured.
+Residual diagnostics and Ljung-Box tests were conducted for the selected total-demand ARIMA and life-threatening ETS models. At lag 20, the total-demand ARIMA model showed no statistically significant remaining autocorrelation (p = 0.773), suggesting that it captured most of the shorter-term time-dependent patterns. In contrast, the life-threatening ETS model showed significant remaining autocorrelation (p < 0.001), indicating that some patterns were not fully captured.
 
 Although the ETS model had less favorable residual diagnostics, it achieved the lowest forecast error for life-threatening demand on the 52-week test set in the main model comparison. These findings highlight the importance of considering both residual diagnostics and out-of-sample forecast accuracy when evaluating forecasting models.
 
