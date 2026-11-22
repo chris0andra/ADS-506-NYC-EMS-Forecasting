@@ -228,6 +228,88 @@ response_accuracy
 
 ```
 
+### Manual ARIMA Model Selection
+
+```{r}
+# Check differencing requirements for each emergency category
+
+ems_train_ts |>
+  features(Arrival_Seconds, unitroot_ndiffs)
+
+ems_train_ts |>
+  features(Arrival_Seconds, unitroot_nsdiffs)
+```
+
+```{r}
+# ACF and PACF: Life-Threatening emergencies
+
+ems_train_ts |>
+  filter(Category == "Life-Threatening") |>
+  mutate(
+    diff_arrival = difference(Arrival_Seconds)
+  ) |>
+  gg_tsdisplay(
+    diff_arrival,
+    plot_type = "partial"
+  )
+```
+
+```{r}
+# ACF and PACF: Non-Life-Threatening emergencies
+
+ems_train_ts |>
+  filter(Category == "Non-Life-Threatening") |>
+  mutate(
+    diff_arrival = difference(Arrival_Seconds)
+  ) |>
+  gg_tsdisplay(
+    diff_arrival,
+    plot_type = "partial"
+  )
+```
+
+```{r}
+# Manual versus automatic ARIMA model comparison
+# Models fitted using training data only
+
+manual_response_fit <- ems_train_ts |>
+  model(
+    ARIMA_011 = ARIMA(Arrival_Seconds ~ pdq(0, 1, 1)),
+    ARIMA_012 = ARIMA(Arrival_Seconds ~ pdq(0, 1, 2)),
+    Auto_ARIMA = ARIMA(Arrival_Seconds),
+    ETS = ETS(Arrival_Seconds)
+  )
+
+# Compare model fit using training-data AICc
+manual_response_fit |>
+  glance() |>
+  select(Category, .model, AICc) |>
+  arrange(Category, AICc)
+```
+
+```{r}
+# Evaluate manual ARIMA, automatic ARIMA, and ETS
+# Using the same 52-week test period
+
+manual_response_fc <- manual_response_fit |>
+  forecast(new_data = ems_test_ts)
+
+manual_response_accuracy <- manual_response_fc |>
+  accuracy(ems_test_ts) |>
+  select(Category, .model, RMSE, MAE, MAPE) |>
+  arrange(Category, RMSE)
+
+manual_response_accuracy
+```
+
+### Manual vs. Automatic ARIMA Interpretation
+
+Manual ARIMA models were selected using differencing tests and the ACF/PACF patterns of the training series. Both emergency categories suggested one regular difference and no seasonal difference. ARIMA(0,1,1) and ARIMA(0,1,2) were compared with automatically selected ARIMA and ETS models using the same 52-week test period.
+
+ETS achieved the lowest RMSE and MAE for both emergency categories. However, manually selected ARIMA(0,1,1) achieved the lowest MAPE, with 8.37% for life-threatening emergencies and 19.02% for non-life-threatening emergencies. Manual ARIMA(0,1,1) also outperformed automatic ARIMA across all three test accuracy metrics.
+
+Although automatic ARIMA had the lowest AICc among the ARIMA candidates on the training data, it produced higher test-set errors than the manually selected ARIMA(0,1,1) model. These findings demonstrate that automatically selected models do not always provide the most accurate forecasts on unseen data, and model selection depends partly on the evaluation metric.
+
 ```{r}
 #| echo: false
 
@@ -263,7 +345,7 @@ ets_fc |>
 
 ```
 
-**Interpretation.** ETS was the most accurate model for both categories. ETS forecasted life-threatening response times more accurately with a MAPE of 8.39% versus 19.79% for non-life-threatening incidents.
+**Interpretation.** ETS achieved the lowest RMSE and MAE for both emergency categories in the expanded model comparison. However, manual ARIMA(0,1,1) achieved slightly lower MAPE. Both models forecasted life-threatening response times more accurately than non-life-threatening response times.
 
 ```{r}
 # Check residuals for ETS and ARIMA models
@@ -315,7 +397,7 @@ response_models |>
 
 The Ljung–Box test was conducted at lag 20 to evaluate residual autocorrelation. ARIMA showed no statistically significant remaining autocorrelation for either life-threatening (p = 0.966) or non-life-threatening (p = 0.996) emergencies. In contrast, ETS showed significant remaining autocorrelation for both life-threatening (p = 0.031) and non-life-threatening (p = 0.041) emergencies.
 
-Although ARIMA demonstrated more favorable residual diagnostics, ETS achieved lower forecast errors on the 52-week test set. These findings suggest that ETS provided better out-of-sample accuracy for the evaluated period, while some residual dependence remains. Model selection should therefore consider both forecast accuracy and diagnostic results.
+Although automatically selected ARIMA demonstrated more favorable residual diagnostics, ETS achieved lower RMSE and MAE on the 52-week test set. Manual ARIMA(0,1,1) achieved slightly lower MAPE than ETS. These findings suggest that model selection should consider forecast accuracy, the evaluation metric, and residual diagnostics rather than relying on a single measure.
 
 ## 3.1. Rolling-Origin Cross-Validation
 
@@ -562,6 +644,87 @@ incident_correlations
 
 **Interpretation.** Higher incident volume was associated with longer response times for life-threatening incidents (r = 0.501). The relationship was weaker for non-life-threatening incidents (r = 0.233).
 
-## 5. Response-Time Results
+## 5. Future EMS Response-Time Forecasts
 
-**Takeaway.** Life-threatening emergencies had shorter and more consistent call-to-arrival times than non-life-threatening emergencies. ETS achieved the lowest forecast errors on the 52-week test set for both categories, although its residual diagnostics showed some remaining autocorrelation. Rolling-origin cross-validation also produced lower forecast errors for life-threatening emergencies. Comparing training periods produced mixed results, with full-history training generally performing better but recent-history training slightly improving MAPE for non-life-threatening emergencies. Incident volume was more strongly associated with response times for life-threatening emergencies.
+```{r}
+# Prepare all available response-time data
+# Combine training and testing observations
+
+response_full <- bind_rows(ems_train, ems_test) |>
+  arrange(Category, Week) |>
+  select(Week, Category, Arrival_Seconds) |>
+  as_tsibble(key = Category, index = Week)
+
+# Refit ETS models using all available historical data
+future_response_models <- response_full |>
+  model(
+    ETS = ETS(Arrival_Seconds)
+  )
+
+# Display fitted models
+future_response_models
+```
+
+```{r}
+# Forecast EMS response times for the next 52 weeks
+# The first 4 weeks represent the short-term forecast
+
+future_response_fc <- future_response_models |>
+  forecast(h = 52, level = c(80, 95))
+
+# Display the first 4 forecast weeks for each category
+future_response_fc |>
+  as_tibble() |>
+  group_by(Category) |>
+  slice_head(n = 4) |>
+  ungroup() |>
+  mutate(
+    Forecast_Minutes = .mean / 60
+  ) |>
+  select(
+    Week,
+    Category,
+    Forecast_Seconds = .mean,
+    Forecast_Minutes
+  )
+```
+
+```{r}
+# Future EMS response-time forecasts
+# Display historical observations and 80%/95% prediction intervals
+
+future_response_fc |>
+  autoplot(
+    response_full |> filter_index("2024 Jan" ~ .),
+    level = c(80, 95)
+  ) +
+  facet_wrap(~ Category, scales = "free_y") +
+  labs(
+    title = "NYC EMS Response-Time Forecasts: 52 Weeks Ahead",
+    subtitle = "ETS models with 80% and 95% prediction intervals",
+    x = "Week",
+    y = "Average Call-to-Arrival Time (Seconds)"
+  )
+```
+
+### Future Response-Time Forecast Interpretation
+
+Using all available observations through September 14, 2026, ETS models forecasted average weekly call-to-arrival times of approximately 15.53 minutes for life-threatening emergencies and 43.48 minutes for non-life-threatening emergencies. These forecasts reflect the elevated response times observed toward the end of the historical period.
+
+Both ETS models projected relatively constant response times across the 52-week horizon. However, the 80% and 95% prediction intervals widened substantially, indicating greater uncertainty over longer forecasting periods.
+
+The non-life-threatening forecast intervals extended below zero at longer horizons, which is not physically meaningful for response times. This highlights a limitation of the model's uncertainty estimates and suggests that longer-term forecasts should be interpreted cautiously.
+
+Overall, these forecasts could help identify potential response-time pressures for EMS planning, but they should not be treated as exact predictions. Unexpected operational changes and external disruptions could substantially affect actual response times.
+
+## 6. Response-Time Results
+
+**Takeaway.** Life-threatening emergencies generally had shorter and more consistent call-to-arrival times than non-life-threatening emergencies.
+
+On the 52-week test set, ETS achieved the lowest RMSE and MAE for both emergency categories. However, manually selected ARIMA(0,1,1) achieved the lowest MAPE, with 8.37% for life-threatening emergencies and 19.02% for non-life-threatening emergencies. The manual model also outperformed automatically selected ARIMA across all three accuracy measures, demonstrating the value of comparing manual and automatic model specifications.
+
+Rolling-origin cross-validation showed relatively low one-week-ahead ETS forecast errors. Residual diagnostics identified some remaining autocorrelation in the ETS models, while training-window comparisons produced mixed results.
+
+Using all available data through September 14, 2026, the refitted ETS models projected average call-to-arrival times of approximately 15.53 minutes for life-threatening emergencies and 43.48 minutes for non-life-threatening emergencies. These forecasts reflected elevated response times near the end of the historical period.
+
+Although these predictions could help NYC EMS anticipate potential response-time pressures, uncertainty increased considerably across the 52-week forecast horizon. The non-life-threatening prediction intervals also extended below zero, highlighting limitations in the model's uncertainty estimates. Therefore, forecasts should be interpreted cautiously and used as planning aids rather than exact predictions.
