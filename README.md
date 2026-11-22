@@ -80,7 +80,7 @@ README.md             Project overview and instructions
 3. Ensure the source CSV is available under `data/raw/` and the processed files are under `data/processed/`.
 4. Run the numbered `.qmd` files in order, starting with data preparation, then the split and forecasting analyses. Render the files with Quarto to inspect figures, tables, and narrative results.
 
-**Path note:** Some forecasting files read data using `../data/processed/`, relative to the `code/` directory. Open or render those files from the expected project context. If the project is moved, verify paths before rendering.
+**Path note:** The Quarto files use `here::here()` to locate data from the repository root. Open the repository as a project in Posit Cloud and render Files 01–05 in order. File 01 generates `ems_weekly_clean.csv`, and File 02 generates `ems_train.csv` and `ems_test.csv` for Files 03–05.
 
 ## Team Contributions
 
