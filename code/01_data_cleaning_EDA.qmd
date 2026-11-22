@@ -65,7 +65,6 @@ We will preserve the original dataset and prepare a cleaned version for time-ser
 ```{r}
 # Load packages for data preparation and time-series analysis
 library(fpp3)
-library(here)
 ```
 
 ## Importing and Inspecting the Raw Dataset
