@@ -7,64 +7,93 @@
 
 ## Project Overview
 
-This project examines emergency medical services (EMS) demand and response times in New York City using historical weekly data from 2013 to 2026.
+This project analyzes New York City emergency medical services (EMS) demand and response times using weekly observations from November 2013 through September 2026. We examine historical changes, compare life-threatening and non-life-threatening emergencies, and evaluate time-series models that forecast incident volume and average call-to-arrival time.
 
-The goal is to apply time-series analysis and forecasting methods to understand emergency demand, compare life-threatening and non-life-threatening emergencies, and investigate response-time patterns.
-
-Our findings may help emergency services anticipate demand and support resource planning.
+**Business question:** Can historical EMS data help forecast future demand and response times, and how does incident demand relate to response-time performance? The goal is to provide evidence that may inform staffing, ambulance availability, and operational planning—not to claim that forecasting alone improves outcomes.
 
 ## Research Objectives
 
-1. Analyze historical EMS demand, trends, and seasonality.
-2. Develop and compare forecasting models for weekly EMS incidents.
-3. Compare demand patterns between life-threatening and non-life-threatening emergencies.
-4. Analyze and forecast EMS response times.
+1. Identify trends, seasonal patterns, and unusual changes in weekly EMS demand.
+2. Forecast weekly EMS demand and compare life-threatening and non-life-threatening categories.
+3. Analyze historical response times and forecast average call-to-arrival times for both categories.
+4. Compare forecasting methods using held-out observations, cross-validation, and residual diagnostics, and discuss implications for EMS resource planning.
 
-## Dataset
+## Data Source and Preparation
 
-**Source:** NYC Open Data — 911 End-to-End Data
+**Source:** [NYC Open Data — 911 End-to-End Data](https://data.cityofnewyork.us/Public-Safety/911-End-to-End-Data/t7p9-n9dy)
 
-https://data.cityofnewyork.us/Public-Safety/911-End-to-End-Data/t7p9-n9dy
+We filtered the source data to NYC EMS records and prepared a regular weekly dataset with incident counts and average response-time measures. The cleaned analysis dataset has **670 weeks**, with one row for each of two emergency categories per week (**1,340 rows**).
 
-The dataset contains weekly emergency incident counts and response-time measurements. Our analysis focuses on EMS records.
+- **Training period:** November 18, 2013–September 15, 2025 (618 weeks).
+- **Testing period:** September 22, 2025–September 14, 2026 (52 weeks).
+- **Demand definition:** The cleaned data retains an overall `Total_Incidents` field that includes 23 incidents without an emergency classification. For consistent category comparisons, the total-demand forecasting models instead sum the two classified incident categories, excluding those 23 incidents. The overall total is therefore not exactly the same as modeled classified demand.
 
-## Initial Team Responsibilities
+The final dataset ends on September 14, 2026; forecasts beyond this date are out-of-sample projections relative to the data cutoff.
 
-### Member 1 — Data Cleaning & Time-Series EDA
-- Import, clean, and validate the dataset.
-- Check missing values, outliers, and data quality.
-- Explore trends, seasonality, and unusual events.
-- Create time-series visualizations and STL decomposition.
-- Save the cleaned dataset in `data/processed/`.
+## Methods
 
-### Member 2 — EMS Demand Forecasting
-- Forecast total weekly EMS incidents.
-- Compare life-threatening and non-life-threatening emergency demand.
-- Build and compare appropriate forecasting models.
-- Evaluate forecast accuracy and visualize results.
+- Exploratory time-series analysis, trend and seasonality assessment, and STL decomposition.
+- Time-ordered training/test split to avoid using future observations in model training.
+- ARIMA models, including manually specified and automatically selected alternatives.
+- Exponential smoothing (ETS) models and a seasonal-naïve baseline for response times.
+- Forecast evaluation using **RMSE, MAE, and MAPE** on a 52-week holdout period.
+- Rolling-origin cross-validation, alternative training-window comparisons, and residual diagnostics (including Ljung–Box tests).
+- Forecasts for the next 52 weeks with 80% and 95% prediction intervals.
 
-### Member 3 — EMS Response-Time Analysis & Forecasting
-- Explore response-time trends for both emergency categories.
-- Examine seasonality and unusual changes in response times.
-- Build and evaluate response-time forecasting models.
-- Investigate the relationship between incident counts and response times.
+## Selected Findings
 
+**Demand forecasting (52-week test period):**
 
-*Responsibilities are preliminary and may be adjusted as the project develops.*
+| Forecast target | Best model in main comparison | RMSE | MAPE |
+| --- | --- | ---: | ---: |
+| Classified total demand | ARIMA | ~1,250 incidents | 5.22% |
+| Life-threatening demand | ETS | ~761 incidents | 6.51% |
+| Non-life-threatening demand | ETS | ~715 incidents | 5.61% |
 
-## Tools
+For **one-week-ahead rolling-origin cross-validation**, ETS had the lowest errors among the ARIMA/ETS comparisons for all three demand targets. This illustrates that the preferred model can depend on the forecast horizon.
 
-- R and RStudio / Posit Cloud
-- Quarto
-- GitHub
-- `fpp3` and related R forecasting packages
+**Response-time forecasting (52-week test period):** ETS produced the lowest RMSE and MAE for both emergency categories; manually specified ARIMA(0,1,1) produced slightly lower MAPE. Refit ETS models projected average weekly call-to-arrival times of approximately **15.53 minutes** for life-threatening emergencies and **43.48 minutes** for non-life-threatening emergencies, using the data available through September 14, 2026.
+
+**Demand and response times:** The association between incident volume and response time varied by emergency category and historical period. Correlation does not establish that higher demand caused slower responses.
+
+**Important limitations:** Some ETS residuals retained statistically significant autocorrelation; forecast uncertainty increased over longer horizons; and some response-time prediction intervals extended below zero, which is not physically meaningful. These forecasts are planning aids, not guarantees of future outcomes.
 
 ## Repository Organization
 
-- `data/raw/` — Original, unchanged dataset
-- `data/processed/` — Cleaned data for analysis
-- `code/` — R/Quarto code for each team member
+```text
+code/                 Quarto (.qmd) analysis files 01–05
+  01_*               Data cleaning and exploratory analysis
+  02_*               Chronological training/test split
+  03_*               EMS demand forecasting
+  04_*               Transformations, validation, and future demand forecasts
+  05_*               Response-time analysis and forecasting
+data/
+  raw/                Original data source
+  processed/          Cleaned weekly data and train/test CSV files
+README.md             Project overview and instructions
+```
+
+## Reproducing the Analysis
+
+1. Open the project in **RStudio** or **Posit Cloud**, with the repository folder structure intact.
+2. Install the R packages used by the Quarto files, including `tidyverse`, `fpp3`, `here`, and `gt`.
+3. Ensure the source CSV is available under `data/raw/` and the processed files are under `data/processed/`.
+4. Run the numbered `.qmd` files in order, starting with data preparation, then the split and forecasting analyses. Render the files with Quarto to inspect figures, tables, and narrative results.
+
+**Path note:** Some forecasting files read data using `../data/processed/`, relative to the `code/` directory. Open or render those files from the expected project context. If the project is moved, verify paths before rendering.
+
+## Team Contributions
+
+- **Christopher Andra:** Project development, data cleaning, exploratory time-series analysis, training/testing preparation, additional model development and validation.
+- **Daniel Lopez:** EMS demand forecasting, ARIMA model selection, ETS comparisons, and forecasting evaluation.
+- **Danitza Loya:** Additional forecasting analysis, transformations, cross-validation, response-time modeling, and evaluation.
+
+All team members contributed to the project through collaborative analysis and shared deliverables.
+
+## AI Assistance and Academic Integrity
+
+AI-assisted tools were used to support aspects of code development, troubleshooting, explanation, editing, and documentation. The team remains responsible for verifying the methods, results, and interpretations. The final course submission should describe the specific use of AI assistance in accordance with the instructor's disclosure requirements.
 
 ## Project Status
 
-The team has selected NYC EMS as its final project topic. Preliminary data checks and forecasting have been completed to assess feasibility. Final analysis, modeling, and evaluation will be conducted collaboratively.
+**Coding and forecasting analysis completed.** The five Quarto analysis files have been rendered and reviewed. The technical findings are intended to support the final written report and narrated project presentation.
