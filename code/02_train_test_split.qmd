@@ -33,7 +33,6 @@ The cleaned master dataset will remain unchanged.
 
 # Load packages for data preparation
 library(fpp3)
-library(here)
 
 # Import the cleaned EMS dataset
 ems_data <- readr::read_csv(
