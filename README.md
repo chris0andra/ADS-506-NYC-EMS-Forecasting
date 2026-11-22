@@ -92,7 +92,7 @@ All team members contributed to the project through collaborative analysis and s
 
 ## AI Assistance and Academic Integrity
 
-AI-assisted tools were used to support aspects of code development, troubleshooting, explanation, editing, and documentation. The team remains responsible for verifying the methods, results, and interpretations. The final course submission should describe the specific use of AI assistance in accordance with the instructor's disclosure requirements.
+AI-assisted tools were used to support aspects of code development, troubleshooting, explanation, editing, readability, and improving visualizations. The team remains responsible for verifying the methods, results, and interpretations.
 
 ## Project Status
 
