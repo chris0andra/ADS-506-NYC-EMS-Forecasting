@@ -77,7 +77,7 @@ README.md             Project overview and instructions
 
 1. Open the project in **RStudio** or **Posit Cloud**, with the repository folder structure intact.
 2. Install the R packages used by the Quarto files, including `tidyverse`, `fpp3`, `here`, and `gt`.
-3. Ensure the source CSV is available under `data/raw/` and the processed files are under `data/processed/`.
+3. Place `911_End-to-End_Data_20261104.csv` in `data/raw/` and make sure the `data/processed/` folder exists.
 4. Run the numbered `.qmd` files in order, starting with data preparation, then the split and forecasting analyses. Render the files with Quarto to inspect figures, tables, and narrative results.
 
 **Path note:** The Quarto files use `here::here()` to locate data from the repository root. Open the repository as a project in Posit Cloud and render Files 01–05 in order. File 01 generates `ems_weekly_clean.csv`, and File 02 generates `ems_train.csv` and `ems_test.csv` for Files 03–05.
