@@ -16,7 +16,6 @@ execute:
 # Load packages
 library(tidyverse)
 library(fpp3)
-library(here)
 library(gt)
 
 ```
@@ -25,13 +24,13 @@ library(gt)
 #| include: false
 
 # Load the training and test datasets
-ems_train <- read_csv(
-  here("data", "processed", "ems_train.csv"),
+ems_train <- readr::read_csv(
+  here::here("data", "processed", "ems_train.csv"),
   show_col_types = FALSE
 )
 
-ems_test <- read_csv(
-  here("data", "processed", "ems_test.csv"),
+ems_test <- readr::read_csv(
+  here::here("data", "processed", "ems_test.csv"),
   show_col_types = FALSE
 )
 
