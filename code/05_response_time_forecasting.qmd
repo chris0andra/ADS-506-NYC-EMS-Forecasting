@@ -556,28 +556,28 @@ response_window_accuracy <- bind_rows(
   )
 
 response_window_accuracy |>
-  gt::gt() |>
-  gt::tab_header(
+  gt() |>
+  tab_header(
     title = "ETS Response-Time Accuracy by Training Window",
     subtitle = "Life-Threatening vs. Non-Life-Threatening EMS Incidents"
   ) |>
-  gt::cols_label(
+  cols_label(
     Category = "Emergency Category",
     Training_Window = "Training Window",
     RMSE = "RMSE",
     MAE = "MAE",
     MAPE = "MAPE"
   ) |>
-  gt::fmt_number(
+  fmt_number(
     columns = c(RMSE, MAE),
     decimals = 2
   ) |>
-  gt::fmt_number(
+  fmt_number(
     columns = MAPE,
     decimals = 2,
     pattern = "{x}%"
   ) |>
-  gt::cols_align(
+  cols_align(
     align = "center",
     columns = everything()
   )
