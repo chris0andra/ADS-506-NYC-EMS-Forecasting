@@ -13,13 +13,15 @@ library(fpp3)
 ```
 
 ```{r}
-ems_train <- read_csv(
-  "../data/processed/ems_train.csv",
-  show_col_types = FALSE)
+ems_train <- readr::read_csv(
+  here::here("data", "processed", "ems_train.csv"),
+  show_col_types = FALSE
+)
 
-ems_test <- read_csv(
-  "../data/processed/ems_test.csv",
-  show_col_types = FALSE)
+ems_test <- readr::read_csv(
+  here::here("data", "processed", "ems_test.csv"),
+  show_col_types = FALSE
+)
 
 glimpse(ems_train)
 glimpse(ems_test)
@@ -29,10 +31,7 @@ glimpse(ems_test)
 
 The forecasting analysis focuses on three views of EMS demand: total weekly incidents, life-threatening incidents, and non-life-threatening incidents. This allows the overall demand forecast to be compared with the two emergency categories.
 
-Total weekly EMS demand is calculated by summing life-threatening and
-non-life-threatening incidents. The 23 unclassified incidents identified
-during data cleaning are excluded to maintain consistency with the
-category-level analysis.
+Total weekly EMS demand is calculated by summing life-threatening and non-life-threatening incidents. The 23 unclassified incidents identified during data cleaning are excluded to maintain consistency with the category-level analysis.
 
 ```{r}
 category_train <- ems_train |>
@@ -243,8 +242,10 @@ category_fc |>
     y = "Incidents")
 ```
 
-## Forecasting Takeaways
+### Forecasting Takeaways
 
-The expanded analysis addresses the project question from three perspectives: total weekly EMS demand, life-threatening demand, and non-life-threatening demand. The original non-life threatening ARIMA analysis showed that a relatively simple ARIMA (0,1,1) model could outperform a more complex automatically selected ARIMA model on unseen data. Comparing ARIMA with ETS for total demand and for each emergency category provides a broader test of whether future EMS demand can be forecast reliably.
+The forecasting analysis evaluated three targets: total weekly EMS demand, life-threatening incidents, and non-life-threatening incidents. On the 52-week test set, ARIMA performed best for total demand (RMSE = 1,250; MAPE = 5.22%), while ETS performed best for life-threatening incidents (RMSE = 761; MAPE = 6.51%) and non-life-threatening incidents (RMSE = 715; MAPE = 5.61%) in the main model comparisons.
 
-The final interpretation should focus on the test-set accuracy results above. In particular, the comparison can show whether one model family consistently performs better and whether one emergency category is easier to forecast than the other. These differences are important operationally because more reliable demand forecasts could support staffing and resource planning, while categories with larger forecast errors may require additional flexibility when allocating EMS resources.
+The initial non-life-threatening ARIMA comparison also showed that the manually selected ARIMA(0,1,1) model outperformed the automatically selected ARIMA model on the test set, demonstrating that a more complex model does not necessarily produce better forecasts.
+
+Overall, no single model performed best across all forecasting targets. The results suggest that historical EMS data can provide useful estimates of future weekly demand, although forecasts remain subject to error. These findings could support staffing and resource planning by helping NYC EMS anticipate expected incident volumes while maintaining flexibility for unexpected changes.
