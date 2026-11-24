@@ -643,6 +643,32 @@ incident_correlations
 
 **Interpretation.** Higher incident volume was associated with longer response times for life-threatening incidents (r = 0.501). The relationship was weaker for non-life-threatening incidents (r = 0.233).
 
+### Dispatch and Travel Times for Two Similarly Busy Weeks
+
+```{r}
+ems_test |>
+  filter(
+    Category == "Non-Life-Threatening",
+    Week %in% as.Date(c("2026-01-12", "2026-06-29"))
+  ) |>
+  arrange(Week) |>
+  transmute(
+    `Week starting` = Week,
+    Incidents,
+    `Call to arrival (min)` = Arrival_Seconds / 60,
+    `Dispatch (min)` = Dispatch_Minutes,
+    `Travel (min)` = Travel_Minutes
+  ) |>
+  gt() |>
+  fmt_number(columns = Incidents, decimals = 0) |>
+  fmt_number(
+    columns = c(`Call to arrival (min)`, `Dispatch (min)`, `Travel (min)`),
+    decimals = 2
+  )
+```
+
+The two weeks differed by only 34 non-life-threatening incidents, yet average call-to-arrival time was about 24 minutes longer in the week of June 29. Reported average dispatch time was 20.47 minutes higher, while average travel time was 3.18 minutes higher. The larger difference in dispatch time points to a stage worth investigating. The two-week comparison leaves open why dispatch took longer.
+
 ## 5. Future EMS Response-Time Forecasts
 
 ```{r}
