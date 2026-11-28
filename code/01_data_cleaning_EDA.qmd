@@ -20,31 +20,36 @@ execute:
   message: false
 ---
 
+
 # Project Introduction
 
 ## Business Problem
 
-Emergency medical services (EMS) must respond to changing demand while maintaining timely emergency response. Fluctuations in incident volume can complicate staffing, ambulance availability, and resource planning. Understanding historical demand patterns and response times may help emergency services better anticipate future needs.
+New York City Emergency Medical Services (EMS) must respond to changing emergency demand while maintaining timely responses. Fluctuations in incident volume can complicate staffing, ambulance availability, and resource planning. Understanding historical demand patterns and response times may help NYC EMS better anticipate future workloads and potential response-time challenges.
+
+**Business Question:** How can NYC EMS use historical data to forecast future emergency incident demand and EMS response times?
+
+The purpose of these forecasts is to provide information that can support more informed resource planning, improve emergency response preparedness, and potentially contribute to better patient outcomes.
 
 ## Project Objectives
 
-This project aims to apply time-series analysis and forecasting methods to NYC emergency medical services data.
+This project applies time-series analysis and forecasting methods to historical NYC EMS data.
 
 The specific objectives are to:
 
-1.  Identify historical trends, seasonal patterns, and unusual changes in weekly EMS demand.
+1. Identify historical trends, seasonal patterns, and unusual changes in weekly EMS demand.
 
-2.  Forecast total weekly EMS incidents and compare demand patterns between life-threatening and non-life-threatening emergencies.
+2. Forecast total weekly EMS incidents and compare demand patterns between life-threatening and non-life-threatening emergencies.
 
-3.  Analyze historical response-time patterns and forecast weekly average response times.
+3. Analyze historical response-time patterns and forecast weekly average call-to-arrival response times.
 
-4.  Evaluate forecasting performance and discuss how the results could support emergency service planning.
+4. Evaluate forecasting performance and discuss how the results could support EMS resource planning and help leadership anticipate potential response-time challenges.
 
 ## Project Scope
 
-The analysis uses publicly available weekly NYC 911 data from November 2013 through September 2026, focusing on emergency medical services. The project examines incident counts and response-time measurements for life-threatening and non-life-threatening emergencies.
+The analysis uses publicly available weekly NYC 911 data from November 2013 through September 2026, focusing specifically on emergency medical services. The project examines incident counts and average call-to-arrival response times for life-threatening and non-life-threatening emergencies.
 
-The findings are intended to support operational planning rather than predict individual emergency incidents or individual ambulance arrival times.
+The forecasts are intended to inform operational planning rather than predict individual emergency incidents or individual EMS unit arrival times. The analysis does not establish the causes of response delays or determine specific staffing requirements.
 
 # Dataset Description and Initial Exploration
 
