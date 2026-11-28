@@ -131,7 +131,7 @@ transformation_accuracy |>
   )
 ```
 
-**Transformation Decision.** The original scale produced the lowest forecast errors (RMSE = 714.84, MAE = 644.52 and MAPE = 5.61%). Thus, no transformation was applied to the final ARIMA (0,1,1) model.
+**Transformation Decision.** The original scale produced the lowest forecast errors (RMSE = 714.84, MAE = 644.52 and MAPE = 5.61%). Therefore, no transformation was applied to the original ARIMA(0,1,1) candidate. This model was retained for comparison in the subsequent validation and tuning experiments.
 
 ## Cross-Validation
 
@@ -379,7 +379,7 @@ bind_rows(total_lb, life_lb) |>
 
 ### Additional Model Validation Interpretation
 
-Residual diagnostics and Ljung-Box tests were conducted for the selected total-demand ARIMA and life-threatening ETS models. At lag 20, the total-demand ARIMA model showed no statistically significant remaining autocorrelation (p = 0.773), suggesting that it captured most of the shorter-term time-dependent patterns. In contrast, the life-threatening ETS model showed significant remaining autocorrelation (p < 0.001), indicating that some patterns were not fully captured.
+Residual diagnostics and Ljung-Box tests were conducted for the selected total-demand ARIMA and life-threatening ETS models. At lag 20, the total-demand ARIMA model showed no statistically significant remaining autocorrelation (p = 0.773), suggesting that it captured most of the shorter-term time-dependent patterns. In contrast, the life-threatening ETS model showed significant remaining autocorrelation (p \< 0.001), indicating that some patterns were not fully captured.
 
 Although the ETS model had less favorable residual diagnostics, it achieved the lowest forecast error for life-threatening demand on the 52-week test set in the main model comparison. These findings highlight the importance of considering both residual diagnostics and out-of-sample forecast accuracy when evaluating forecasting models.
 
@@ -439,15 +439,325 @@ category_cv_accuracy
 
 ### Extended Cross-Validation Interpretation
 
-Rolling-origin cross-validation compared ARIMA and ETS using one-week-ahead forecasts across three EMS demand targets. ETS achieved lower RMSE, MAE, and MAPE than ARIMA for total demand, life-threatening incidents, and non-life-threatening incidents.
+In the initial rolling-origin cross-validation comparison, automatically selected ARIMA and ETS models were evaluated using one-week-ahead forecasts across all three EMS demand targets. ETS achieved lower RMSE, MAE, and MAPE than the automatically selected ARIMA models for total demand, life-threatening incidents, and non-life-threatening incidents.
 
-ETS achieved MAPE values of 2.68% for total demand, 3.85% for life-threatening demand, and 2.23% for non-life-threatening demand. These results suggest that ETS was more accurate for short-term demand forecasting across the evaluated historical periods.
+ETS achieved MAPE values of 2.68% for total demand, 3.85% for life-threatening demand, and 2.23% for non-life-threatening demand. However, subsequent hyperparameter tuning identified ARIMA configurations that performed better for some forecasting targets. These results are examined in the following sections.
 
 However, the original 52-week test-set comparison favored ARIMA for total demand. This difference highlights that forecasting performance can vary with the forecast horizon and evaluation method. Therefore, model selection should consider the intended operational planning horizon rather than relying on a single accuracy measure.
 
+## ARIMA Hyperparameter Tuning Using Rolling-Origin Cross-Validation
+
+To further evaluate ARIMA model configurations, we conducted a systematic hyperparameter search using the training data. Based on the differencing analysis, we fixed d = 1 and compared nine combinations of autoregressive (p) and moving-average (q) orders, ranging from 0 to 2.
+
+Each configuration was evaluated using rolling-origin cross-validation with one-week-ahead forecasts. We used RMSE as the primary comparison metric, with MAE and MAPE as supporting measures. The original 52-week test set was excluded from this tuning procedure.
+
+```{r}
+
+# Nine ARIMA configurations: p = 0:2, d = 1, q = 0:2
+
+demand_tuning_cv <- ntl_train |>
+  stretch_tsibble(.init = 260, .step = 13)
+
+demand_tuning_models <- demand_tuning_cv |>
+  model(
+    ARIMA_010 = ARIMA(Incidents ~ 0 + pdq(0, 1, 0) + PDQ(0, 0, 0)),
+    ARIMA_011 = ARIMA(Incidents ~ 0 + pdq(0, 1, 1) + PDQ(0, 0, 0)),
+    ARIMA_012 = ARIMA(Incidents ~ 0 + pdq(0, 1, 2) + PDQ(0, 0, 0)),
+    ARIMA_110 = ARIMA(Incidents ~ 0 + pdq(1, 1, 0) + PDQ(0, 0, 0)),
+    ARIMA_111 = ARIMA(Incidents ~ 0 + pdq(1, 1, 1) + PDQ(0, 0, 0)),
+    ARIMA_112 = ARIMA(Incidents ~ 0 + pdq(1, 1, 2) + PDQ(0, 0, 0)),
+    ARIMA_210 = ARIMA(Incidents ~ 0 + pdq(2, 1, 0) + PDQ(0, 0, 0)),
+    ARIMA_211 = ARIMA(Incidents ~ 0 + pdq(2, 1, 1) + PDQ(0, 0, 0)),
+    ARIMA_212 = ARIMA(Incidents ~ 0 + pdq(2, 1, 2) + PDQ(0, 0, 0))
+  )
+
+demand_tuning_forecasts <- demand_tuning_models |>
+  forecast(h = 1)
+
+demand_tuning_accuracy <- demand_tuning_forecasts |>
+  accuracy(ntl_train) |>
+  select(.model, RMSE, MAE, MAPE) |>
+  arrange(RMSE)
+
+demand_tuning_accuracy
+
+```
+
+### Hyperparameter Tuning Results
+
+The systematic ARIMA grid search evaluated nine parameter combinations for non-life-threatening EMS demand using one-week-ahead rolling-origin cross-validation. ARIMA(1,1,0) achieved the lowest RMSE of 404.34, while ARIMA(0,1,2) achieved the lowest MAE of 279.30 and MAPE of 2.25%.
+
+The previously selected ARIMA(0,1,1) model achieved an RMSE of 406.84, only slightly higher than the best-performing configuration. This indicates that the original manually selected model was already competitive and that additional tuning produced only a modest improvement.
+
+Furthermore, the ETS model evaluated in the earlier cross-validation analysis achieved a slightly lower RMSE of approximately 402, suggesting that ETS remained competitive for short-term non-life-threatening EMS demand forecasting.
+
+Overall, the results demonstrate that systematic hyperparameter tuning can help identify alternative ARIMA configurations, although more complex models do not necessarily produce better forecasts.
+
+### ARIMA Hyperparameter Tuning: Total and Life-Threatening Demand
+
+We extended the ARIMA hyperparameter search to total classified EMS demand and life-threatening incidents using the same nine model configurations. The differencing order was fixed at d = 1, while p and q ranged from 0 to 2.
+
+All models were evaluated using one-week-ahead rolling-origin cross-validation on the training data. RMSE was used as the primary model selection metric, with MAE and MAPE included for additional comparison.
+
+```{r}
+
+# Combine the two remaining demand targets
+additional_demand_train <- bind_rows(
+  total_train |>
+    as_tibble() |>
+    mutate(Target = "Total Classified Demand"),
+  life_train |>
+    as_tibble() |>
+    mutate(Target = "Life-Threatening Demand")
+) |>
+  as_tsibble(key = Target, index = Week)
+
+# Create the same rolling-origin training windows
+additional_demand_cv <- additional_demand_train |>
+  stretch_tsibble(.init = 260, .step = 13)
+
+# Test the same nine ARIMA configurations
+additional_arima_models <- additional_demand_cv |>
+  model(
+    ARIMA_010 = ARIMA(Incidents ~ 0 + pdq(0,1,0) + PDQ(0,0,0)),
+    ARIMA_011 = ARIMA(Incidents ~ 0 + pdq(0,1,1) + PDQ(0,0,0)),
+    ARIMA_012 = ARIMA(Incidents ~ 0 + pdq(0,1,2) + PDQ(0,0,0)),
+    ARIMA_110 = ARIMA(Incidents ~ 0 + pdq(1,1,0) + PDQ(0,0,0)),
+    ARIMA_111 = ARIMA(Incidents ~ 0 + pdq(1,1,1) + PDQ(0,0,0)),
+    ARIMA_112 = ARIMA(Incidents ~ 0 + pdq(1,1,2) + PDQ(0,0,0)),
+    ARIMA_210 = ARIMA(Incidents ~ 0 + pdq(2,1,0) + PDQ(0,0,0)),
+    ARIMA_211 = ARIMA(Incidents ~ 0 + pdq(2,1,1) + PDQ(0,0,0)),
+    ARIMA_212 = ARIMA(Incidents ~ 0 + pdq(2,1,2) + PDQ(0,0,0))
+  )
+
+# Forecast one week ahead
+additional_arima_fc <- additional_arima_models |>
+  forecast(h = 1)
+
+
+# Compare accuracy separately for each target
+additional_arima_accuracy <- additional_arima_fc |>
+  accuracy(additional_demand_train) |>
+  select(Target, .model, RMSE, MAE, MAPE) |>
+  arrange(Target, RMSE)
+
+additional_arima_accuracy
+
+
+```
+
+Some ARIMA fits produced coefficient standard-error warnings. All nine configurations still produced valid point forecasts for all 28 validation weeks in both demand series.
+
+### ETS Configuration Tuning Across All Demand Categories
+
+To extend hyperparameter tuning beyond ARIMA, we compared several Exponential Smoothing (ETS) configurations for total classified EMS demand, life-threatening incidents, and non-life-threatening incidents.
+
+The candidate models varied their error and trend components while holding seasonality at none, consistent with the relatively weak seasonal patterns observed in the exploratory analysis. Automatic ETS selection was also included as a benchmark.
+
+All configurations were evaluated using the same training-period rolling-origin cross-validation procedure as the ARIMA experiments, with an initial window of 260 weeks, a step size of 13 weeks, and one-week-ahead forecasts. RMSE was the primary selection criterion, with MAE and MAPE used as supporting measures. The 52-week test set was excluded from tuning.
+
+```{r}
+
+# Combine all three EMS demand targets
+ets_demand_train <- bind_rows(
+  total_train |>
+    as_tibble() |>
+    mutate(Target = "Total Classified Demand"),
+  
+  life_train |>
+    as_tibble() |>
+    mutate(Target = "Life-Threatening Demand"),
+  
+  ntl_train |>
+    as_tibble() |>
+    mutate(Target = "Non-Life-Threatening Demand")
+) |>
+  as_tsibble(key = Target, index = Week)
+
+# Create rolling-origin cross-validation windows
+ets_demand_cv <- ets_demand_train |>
+  stretch_tsibble(.init = 260, .step = 13)
+
+# Fit candidate ETS configurations
+ets_demand_models <- ets_demand_cv |>
+  model(
+    ETS_ANN = ETS(
+      Incidents ~ error("A") + trend("N") + season("N")
+    ),
+    
+    ETS_AAN = ETS(
+      Incidents ~ error("A") + trend("A") + season("N")
+    ),
+    
+    ETS_AAdN = ETS(
+      Incidents ~ error("A") + trend("Ad") + season("N")
+    ),
+    
+    ETS_MNN = ETS(
+      Incidents ~ error("M") + trend("N") + season("N")
+    ),
+    
+    ETS_MAN = ETS(
+      Incidents ~ error("M") + trend("A") + season("N")
+    ),
+    
+    ETS_MAdN = ETS(
+      Incidents ~ error("M") + trend("Ad") + season("N")
+    ),
+    
+    ETS_Auto = ETS(Incidents)
+  )
+
+# Generate one-week-ahead forecasts
+ets_demand_fc <- ets_demand_models |>
+  forecast(h = 1)
+
+# Compare model accuracy
+ets_demand_accuracy <- ets_demand_fc |>
+  accuracy(ets_demand_train) |>
+  select(Target, .model, RMSE, MAE, MAPE) |>
+  arrange(Target, RMSE)
+
+ets_demand_accuracy
+
+# Identify the best ETS configuration for each target
+ets_demand_best <- ets_demand_accuracy |>
+  group_by(Target) |>
+  slice_min(RMSE, n = 1, with_ties = FALSE) |>
+  ungroup()
+
+ets_demand_best
+
+
+```
+
+### Combined ARIMA and ETS Hyperparameter Tuning Results
+
+We conducted systematic hyperparameter tuning for three EMS demand targets using rolling-origin cross-validation with one-week-ahead forecasts. Nine ARIMA configurations and seven ETS configurations were evaluated for each target, with RMSE used as the primary selection criterion.
+
+For total classified EMS demand, ARIMA(0,1,0) achieved the lowest RMSE of 735.86, outperforming the best ETS configuration, ETS(A,N,N), which achieved an RMSE of 753.53. Similarly, ARIMA(0,1,0) performed best for life-threatening demand, achieving an RMSE of 374.19 compared with 397.85 for ETS(A,N,N).
+
+For non-life-threatening demand, automatic ETS achieved the lowest RMSE of 402.45, slightly outperforming the best tuned ARIMA(1,1,0) model, which achieved an RMSE of 404.34.
+
+These results demonstrate that optimal model selection varies by forecasting target. Simpler ARIMA configurations performed best for total and life-threatening demand, while ETS remained slightly more accurate for non-life-threatening demand. The findings also demonstrate that automatic model selection does not always identify the configuration with the lowest cross-validation error.
+
+Because these comparisons evaluated one-week-ahead forecasts, the results primarily inform short-term forecasting. They do not automatically establish which models perform best over the longer 52-week forecasting horizon.
+
+### Multi-Horizon Model Validation
+
+To evaluate whether the selected models remain accurate over longer forecasting periods, we extended the rolling-origin cross-validation analysis to multiple forecast horizons. Four candidate models were compared across all three EMS demand targets: ARIMA(0,1,0), ARIMA(1,1,0), ETS(A,N,N), and automatically selected ETS.
+
+Forecast accuracy was evaluated at 1, 4, 12, and 52 weeks ahead using RMSE, MAE, and MAPE. The same training windows were used across all models to ensure consistent comparisons. Only observations from the training period were used, keeping the original 52-week test set separate from model selection.
+
+```{r}
+
+# Create rolling-origin windows for all three targets
+# Step size of 26 weeks keeps the longer-horizon
+# experiment manageable
+
+horizon_cv <- ets_demand_train |>
+  stretch_tsibble(.init = 260, .step = 26)
+
+# Fit the four candidate models
+horizon_models <- horizon_cv |>
+  model(
+    ARIMA_010 = ARIMA(
+      Incidents ~ 0 + pdq(0, 1, 0) + PDQ(0, 0, 0)
+    ),
+    ARIMA_110 = ARIMA(
+      Incidents ~ 0 + pdq(1, 1, 0) + PDQ(0, 0, 0)
+    ),
+    ETS_ANN = ETS(
+      Incidents ~ error("A") + trend("N") + season("N")
+    ),
+    ETS_Auto = ETS(Incidents)
+  )
+
+# Forecast up to 52 weeks from each origin
+horizon_forecasts <- horizon_models |>
+  forecast(h = 52)
+
+# Add the forecast horizon to each prediction
+horizon_predictions <- horizon_forecasts |>
+  as_tibble() |>
+  group_by(Target, .model, .id) |>
+  arrange(Week, .by_group = TRUE) |>
+  mutate(Horizon = row_number()) |>
+  ungroup()
+
+# Match forecasts against actual TRAINING observations
+horizon_actuals <- ets_demand_train |>
+  as_tibble() |>
+  select(Target, Week, Actual = Incidents)
+
+horizon_errors <- horizon_predictions |>
+  inner_join(
+    horizon_actuals,
+    by = c("Target", "Week")
+  ) |>
+  group_by(Target, .model, .id) |>
+  filter(n() == 52) |>
+  ungroup() |>
+  mutate(
+    Error = Actual - .mean,
+    Absolute_Error = abs(Error),
+    APE = abs(Error / Actual) * 100
+  )
+
+# Compare accuracy at four specific forecast horizons
+horizon_accuracy <- horizon_errors |>
+  filter(Horizon %in% c(1, 4, 12, 52)) |>
+  group_by(Target, Horizon, .model) |>
+  summarise(
+    RMSE = sqrt(mean(Error^2)),
+    MAE = mean(Absolute_Error),
+    MAPE = mean(APE),
+    .groups = "drop"
+  ) |>
+  arrange(Target, Horizon, RMSE)
+
+horizon_accuracy
+
+# Show the best model at each horizon
+horizon_winners <- horizon_accuracy |>
+  group_by(Target, Horizon) |>
+  slice_min(RMSE, n = 1, with_ties = FALSE) |>
+  ungroup()
+
+horizon_winners
+
+
+# Evaluate forecast accuracy across ALL 52 weeks
+# rather than at individual horizons
+
+full_horizon_accuracy <- horizon_errors |>
+  group_by(Target, .model) |>
+  summarise(
+    RMSE = sqrt(mean(Error^2)),
+    MAE = mean(Absolute_Error),
+    MAPE = mean(APE),
+    .groups = "drop"
+  ) |>
+  arrange(Target, RMSE)
+
+full_horizon_accuracy
+
+# Select the best model for each target
+full_horizon_winners <- full_horizon_accuracy |>
+  group_by(Target) |>
+  slice_min(RMSE, n = 1, with_ties = FALSE) |>
+  ungroup()
+
+full_horizon_winners
+
+
+```
+
 ## Future EMS Demand Forecasts
 
-We use ETS for the short-term demand projections because it produced the lowest one week ahead cross-validation errors across all three demand series. However, ARIMA performed better for classified total demand on the original 52 week holdout. This suggests that model performance depends on the forecast horizon, so ETS is emphasized for near-term planning while the longer-range forecasts should be interpreted more cautiously.
+Following systematic hyperparameter tuning and multi-horizon rolling-origin cross-validation, different forecasting models were selected for the three EMS demand targets. ARIMA(0,1,0) was selected for total classified and non-life-threatening demand, while automatically selected ETS was retained for life-threatening demand.
+
+These models achieved the lowest RMSE among the evaluated candidates across the complete 52-week validation horizon. The selected models were then refitted using all available historical observations to generate forecasts for the following 52 weeks.
 
 ```{r}
 # Prepare complete historical data for future forecasting
@@ -469,37 +779,49 @@ category_full <- ems_full |>
   select(Week, Category, Incidents) |>
   as_tsibble(key = Category, index = Week)
 
-# Fit ARIMA and ETS using all available observations
+
+# Fit the selected models using all available data
+
+# Total classified EMS demand: ARIMA(0,1,0)
 future_total_models <- total_full |>
   model(
-    ARIMA = ARIMA(Incidents),
-    ETS = ETS(Incidents)
+    ARIMA_010 = ARIMA(
+      Incidents ~ 0 + pdq(0, 1, 0) + PDQ(0, 0, 0)
+    )
   )
 
-future_category_models <- category_full |>
+# Demand by category: use a different model for each
+future_life_models <- category_full |>
+  filter(Category == "Life-Threatening") |>
   model(
-    ARIMA = ARIMA(Incidents),
-    ETS = ETS(Incidents)
+    ETS_Auto = ETS(Incidents)
   )
 
-# Verify the fitted models
-future_total_models
-future_category_models
-```
+future_ntl_models <- category_full |>
+  filter(Category == "Non-Life-Threatening") |>
+  model(
+    ARIMA_010 = ARIMA(
+      Incidents ~ 0 + pdq(0, 1, 0) + PDQ(0, 0, 0)
+    )
+  )
 
-```{r}
-# Future EMS demand forecasts: 52 weeks ahead
-# The first 4 weeks represent the short-term planning horizon
-
+# Generate 52-week forecasts
 future_total_fc <- future_total_models |>
-  select(ETS) |>
   forecast(h = 52, level = c(80, 95))
 
-future_category_fc <- future_category_models |>
-  select(ETS) |>
+future_life_fc <- future_life_models |>
   forecast(h = 52, level = c(80, 95))
 
-# Display first 4 weeks of future predictions
+future_ntl_fc <- future_ntl_models |>
+  forecast(h = 52, level = c(80, 95))
+
+# Combine the two category forecasts
+future_category_fc <- bind_rows(
+  future_life_fc,
+  future_ntl_fc
+)
+
+# Display first four weeks of forecasts
 future_total_fc |>
   as_tibble() |>
   select(Week, .mean) |>
@@ -511,6 +833,7 @@ future_category_fc |>
   slice_head(n = 4) |>
   ungroup() |>
   select(Week, Category, .mean)
+
 ```
 
 ```{r}
@@ -523,7 +846,7 @@ future_total_fc |>
   ) +
   labs(
     title = "NYC EMS Total Demand: 52-Week Forecast",
-    subtitle = "ETS model with 80% and 95% prediction intervals",
+    subtitle = "ARIMA(0,1,0) with 80% and 95% prediction intervals",
     x = "Week",
     y = "Weekly EMS Incidents"
   )
@@ -541,7 +864,7 @@ future_category_fc |>
   facet_wrap(~ Category, scales = "free_y") +
   labs(
     title = "NYC EMS Demand Forecasts by Emergency Category",
-    subtitle = "ETS models with 80% and 95% prediction intervals",
+    subtitle = "Selected ARIMA and ETS models with 80% and 95% prediction intervals",
     x = "Week",
     y = "Weekly EMS Incidents"
   )
@@ -549,20 +872,28 @@ future_category_fc |>
 
 ### Future EMS Demand Forecast Interpretation
 
-Using all available observations through September 14, 2026, the ETS models generated forecasts for the following 52 weeks. Predicted weekly EMS demand was approximately 21,985 total incidents, including 10,630 life-threatening and 11,361 non-life-threatening incidents based on independently fitted models.
+Using all available observations through September 14, 2026, the selected models generated forecasts for the following 52 weeks. Predicted weekly EMS demand was approximately 21,962 total classified incidents, with approximately 10,630 life-threatening incidents and 11,300 non-life-threatening incidents.
 
-The forecasts remained relatively stable across the prediction period, suggesting that the models anticipate demand near recent historical levels. However, the 80% and 95% prediction intervals widened substantially over the 52-week horizon, indicating increasing uncertainty.
+The forecasts remained relatively stable, indicating that the selected models anticipate demand near recent historical levels. The ARIMA(0,1,0) models produce constant point forecasts based on the most recent observed weekly incident counts, while the selected ETS model produces gradually changing forecasts for life-threatening incidents.
 
-These results suggest that short-term forecasts may provide useful estimates for EMS staffing and resource planning, while longer-term forecasts should be interpreted cautiously. Unexpected events, operational changes, and shifts in emergency demand may cause actual incident volumes to differ significantly from the predicted values.
+Because the three targets were forecast independently, the category predictions do not sum exactly to the total prediction. The difference is approximately 32 incidents per week and reflects the lack of a reconciliation constraint between the separately fitted models.
 
-The forecast period begins September 21, 2026, immediately after the final week in the dataset. These predictions represent forecasts beyond the dataset cutoff, rather than a claim that all forecast dates are still in the future.
+The 80% and 95% prediction intervals represent uncertainty around the forecasts. These intervals should be considered when interpreting longer-term forecasts, because actual EMS demand may differ from the predicted values due to unexpected events, changes in emergency service operations, or shifts in incident patterns.
+
+These forecasts may support EMS staffing and resource planning, particularly for anticipating general demand levels. However, longer-term predictions should be interpreted cautiously because forecasting uncertainty increases as the prediction horizon extends.
+
+The forecast period begins September 21, 2026, immediately after the final week in the dataset. These predictions represent forecasts beyond the dataset cutoff rather than a claim that all forecast dates are still in the future.
 
 ## Final Conclusion
 
-The forecasting validation compared ARIMA and ETS models across total, life-threatening, and non-life-threatening EMS demand. The original 52-week test-set evaluation favored ARIMA for total demand and ETS for both emergency categories. However, extended rolling-origin cross-validation showed that ETS performed better for all three targets when predicting one week ahead, achieving MAPE values of 2.68%, 3.85%, and 2.23%, respectively.
+This analysis evaluated forecasting models for total classified EMS demand, life-threatening incidents, and non-life-threatening incidents using historical NYC emergency response data. The initial model comparisons included ARIMA and ETS, followed by transformation analysis, residual diagnostics, systematic hyperparameter tuning, and rolling-origin cross-validation.
 
-Additional analysis found that the non-life-threatening ARIMA(0,1,1) model performed best without transforming incident counts, and using the full historical training period produced slightly better results than training only on data from 2022 onward. Residual diagnostics showed no statistically significant remaining autocorrelation for the total-demand ARIMA model (Ljung–Box p = 0.773), while the life-threatening ETS model showed significant remaining autocorrelation (p \< 0.001).
+Nine ARIMA configurations and seven ETS configurations were evaluated for each demand target using one-week-ahead cross-validation. Additional multi-horizon validation compared four shortlisted models at 1, 4, 12, and 52 weeks ahead. Model performance varied depending on the emergency category and forecast horizon, demonstrating that no single model consistently performed best.
 
-Using all available data through September 14, 2026, the ETS models projected approximately 21,985 total EMS incidents per week, with around 10,630 life-threatening and 11,361 non-life-threatening incidents. These projections remained relatively stable, but their prediction intervals widened considerably over the 52-week forecast horizon.
+When forecast errors were evaluated across the complete 52-week validation horizon, ARIMA(0,1,0) achieved the lowest RMSE for total classified and non-life-threatening demand, while automatically selected ETS performed best for life-threatening demand. The improvements over alternative models were relatively modest, but these findings supported selecting different models for different forecasting targets.
 
-Overall, the findings show that model accuracy depends on the forecasting target and prediction horizon. Short-term forecasts could support staffing and resource planning, while longer-term forecasts should be used cautiously because uncertainty increases over time. The remaining residual patterns and unexpected changes in EMS demand highlight the importance of regularly updating and evaluating forecasting models.
+The final model selections were based on rolling-origin cross-validation using the training data, while the models were refitted using the complete historical dataset to generate the final forecasts.
+
+Using all available observations through September 14, 2026, the selected models forecast approximately 21,962 total classified EMS incidents per week, including independently predicted levels of approximately 10,630 life-threatening and 11,300 non-life-threatening incidents. The forecasts were generally stable, although uncertainty increased over longer forecasting horizons.
+
+Overall, the analysis demonstrates the importance of comparing model configurations and evaluating performance over multiple prediction horizons. The resulting forecasts provide a starting point for EMS staffing and resource planning, but should be updated regularly as new data become available. Future improvements could include additional forecasting variables, reconciliation of category and total forecasts, and further investigation of unexpected changes in emergency demand.

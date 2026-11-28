@@ -586,6 +586,257 @@ response_window_accuracy |>
 
 **Interpretation.** Full-history training produced lower RMSE for both emergency categories. However, recent-history training slightly improved MAPE for non-life-threatening emergencies (18.79% versus 19.79%). Overall, the results were mixed, with no consistent advantage from using only recent data.
 
+### 3.3 ARIMA Hyperparameter Tuning for EMS Response Times
+
+To systematically evaluate ARIMA configurations for EMS response-time forecasting, we tested nine combinations of autoregressive (p) and moving-average (q) orders for both life-threatening and non-life-threatening emergencies.
+
+Based on the earlier differencing analysis, we fixed d = 1 and used nonseasonal models without drift. Each configuration was evaluated using rolling-origin cross-validation with an initial training window of 260 weeks, a step size of 13 weeks, and one-week-ahead forecasts.
+
+RMSE was used as the primary selection metric, with MAE and MAPE included for additional comparison. All tuning was conducted using the training data, without using the original 52-week test period.
+
+```{r}
+
+# Rolling-origin cross-validation for both response categories
+response_tuning_cv <- ems_train_ts |>
+  stretch_tsibble(.init = 260, .step = 13)
+
+# Test nine ARIMA configurations
+response_arima_models <- response_tuning_cv |>
+  model(
+    ARIMA_010 = ARIMA(
+      Arrival_Seconds ~ 0 + pdq(0,1,0) + PDQ(0,0,0)
+    ),
+    ARIMA_011 = ARIMA(
+      Arrival_Seconds ~ 0 + pdq(0,1,1) + PDQ(0,0,0)
+    ),
+    ARIMA_012 = ARIMA(
+      Arrival_Seconds ~ 0 + pdq(0,1,2) + PDQ(0,0,0)
+    ),
+    ARIMA_110 = ARIMA(
+      Arrival_Seconds ~ 0 + pdq(1,1,0) + PDQ(0,0,0)
+    ),
+    ARIMA_111 = ARIMA(
+      Arrival_Seconds ~ 0 + pdq(1,1,1) + PDQ(0,0,0)
+    ),
+    ARIMA_112 = ARIMA(
+      Arrival_Seconds ~ 0 + pdq(1,1,2) + PDQ(0,0,0)
+    ),
+    ARIMA_210 = ARIMA(
+      Arrival_Seconds ~ 0 + pdq(2,1,0) + PDQ(0,0,0)
+    ),
+    ARIMA_211 = ARIMA(
+      Arrival_Seconds ~ 0 + pdq(2,1,1) + PDQ(0,0,0)
+    ),
+    ARIMA_212 = ARIMA(
+      Arrival_Seconds ~ 0 + pdq(2,1,2) + PDQ(0,0,0)
+    )
+  )
+
+# Forecast one week ahead
+response_arima_fc <- response_arima_models |>
+  forecast(h = 1)
+
+# Compare models using RMSE, MAE, and MAPE
+response_arima_accuracy <- response_arima_fc |>
+  accuracy(ems_train_ts) |>
+  select(Category, .model, RMSE, MAE, MAPE) |>
+  arrange(Category, RMSE)
+
+response_arima_accuracy
+
+# Find the best ARIMA model for each response category
+response_arima_best <- response_arima_accuracy |>
+  group_by(Category) |>
+  slice_min(RMSE, n = 1, with_ties = FALSE) |>
+  ungroup()
+
+response_arima_best
+
+```
+
+### 3.4 ETS Configuration Tuning for EMS Response Times
+
+To evaluate whether alternative exponential smoothing configurations could improve EMS response-time forecasts, we compared six nonseasonal ETS configurations and automatically selected ETS for both emergency categories.
+
+The configurations varied their error and trend components while holding seasonality at none, consistent with the relatively weak seasonal patterns observed in the earlier analysis.
+
+All models were evaluated using rolling-origin cross-validation with an initial training window of 260 weeks, a step size of 13 weeks, and one-week-ahead forecasts. RMSE was the primary selection metric, with MAE and MAPE included as supporting measures. Only training-period observations were used.
+
+```{r}
+
+# Create rolling-origin cross-validation windows
+# for both emergency categories
+
+response_ets_cv <- ems_train_ts |>
+  stretch_tsibble(.init = 260, .step = 13)
+
+# Fit six ETS configurations plus automatic ETS
+response_ets_models <- response_ets_cv |>
+  model(
+    ETS_ANN = ETS(
+      Arrival_Seconds ~ error("A") + trend("N") + season("N")
+    ),
+    
+    ETS_AAN = ETS(
+      Arrival_Seconds ~ error("A") + trend("A") + season("N")
+    ),
+    
+    ETS_AAdN = ETS(
+      Arrival_Seconds ~ error("A") + trend("Ad") + season("N")
+    ),
+    
+    ETS_MNN = ETS(
+      Arrival_Seconds ~ error("M") + trend("N") + season("N")
+    ),
+    
+    ETS_MAN = ETS(
+      Arrival_Seconds ~ error("M") + trend("A") + season("N")
+    ),
+    
+    ETS_MAdN = ETS(
+      Arrival_Seconds ~ error("M") + trend("Ad") + season("N")
+    ),
+    
+    ETS_Auto = ETS(Arrival_Seconds)
+  )
+
+# Forecast one week ahead
+response_ets_fc <- response_ets_models |>
+  forecast(h = 1)
+
+# Compare ETS forecast accuracy
+response_ets_accuracy <- response_ets_fc |>
+  accuracy(ems_train_ts) |>
+  select(Category, .model, RMSE, MAE, MAPE) |>
+  arrange(Category, RMSE)
+
+response_ets_accuracy
+
+# Identify the best ETS configuration for each category
+response_ets_best <- response_ets_accuracy |>
+  group_by(Category) |>
+  slice_min(RMSE, n = 1, with_ties = FALSE) |>
+  ungroup()
+
+response_ets_best
+
+```
+
+### 3.5 Multi-Horizon Response-Time Model Validation
+
+To assess how forecasting performance changes over longer planning periods, we compared four candidate models across both emergency categories: ARIMA(1,1,1), ARIMA(2,1,0), ETS(A,N,N), and automatically selected ETS.
+
+Rolling-origin cross-validation was conducted using an initial training window of 260 weeks and a step size of 26 weeks. Each model generated forecasts up to 52 weeks ahead.
+
+Accuracy was evaluated at forecast horizons of 1, 4, 12, and 52 weeks. We also calculated accuracy across the complete 52-week forecast windows, using RMSE as the primary model selection metric. Only training-period observations were used in this experiment.
+
+```{r}
+
+# Create rolling-origin windows for both response categories
+response_horizon_cv <- ems_train_ts |>
+  stretch_tsibble(.init = 260, .step = 26)
+
+# Fit four shortlisted forecasting models
+response_horizon_models <- response_horizon_cv |>
+  model(
+    ARIMA_111 = ARIMA(
+      Arrival_Seconds ~ 0 + pdq(1,1,1) + PDQ(0,0,0)
+    ),
+    ARIMA_210 = ARIMA(
+      Arrival_Seconds ~ 0 + pdq(2,1,0) + PDQ(0,0,0)
+    ),
+    ETS_ANN = ETS(
+      Arrival_Seconds ~ error("A") + trend("N") + season("N")
+    ),
+    ETS_Auto = ETS(Arrival_Seconds)
+  )
+
+# Generate forecasts up to 52 weeks ahead
+response_horizon_fc <- response_horizon_models |>
+  forecast(h = 52)
+
+# Identify the forecast horizon for each prediction
+response_horizon_predictions <- response_horizon_fc |>
+  as_tibble() |>
+  group_by(Category, .model, .id) |>
+  arrange(Week, .by_group = TRUE) |>
+  mutate(Horizon = row_number()) |>
+  ungroup()
+
+# Match predictions with actual training-period observations
+response_horizon_actuals <- ems_train_ts |>
+  as_tibble() |>
+  select(Category, Week, Actual = Arrival_Seconds)
+
+response_horizon_errors <- response_horizon_predictions |>
+  inner_join(
+    response_horizon_actuals,
+    by = c("Category", "Week")
+  ) |>
+  group_by(Category, .model, .id) |>
+  filter(n() == 52) |>
+  ungroup() |>
+  mutate(
+    Error = Actual - .mean,
+    Absolute_Error = abs(Error),
+    APE = abs(Error / Actual) * 100
+  )
+
+# Compare accuracy at four forecast horizons
+response_horizon_accuracy <- response_horizon_errors |>
+  filter(Horizon %in% c(1, 4, 12, 52)) |>
+  group_by(Category, Horizon, .model) |>
+  summarise(
+    RMSE = sqrt(mean(Error^2)),
+    MAE = mean(Absolute_Error),
+    MAPE = mean(APE),
+    .groups = "drop"
+  ) |>
+  arrange(Category, Horizon, RMSE)
+
+response_horizon_accuracy
+
+# Identify the best model at each horizon
+response_horizon_winners <- response_horizon_accuracy |>
+  group_by(Category, Horizon) |>
+  slice_min(RMSE, n = 1, with_ties = FALSE) |>
+  ungroup()
+
+response_horizon_winners
+
+# Evaluate accuracy across all 52 forecast weeks
+response_full_horizon_accuracy <- response_horizon_errors |>
+  group_by(Category, .model) |>
+  summarise(
+    RMSE = sqrt(mean(Error^2)),
+    MAE = mean(Absolute_Error),
+    MAPE = mean(APE),
+    .groups = "drop"
+  ) |>
+  arrange(Category, RMSE)
+
+response_full_horizon_accuracy
+
+# Select the best overall model for each category
+response_full_horizon_winners <- response_full_horizon_accuracy |>
+  group_by(Category) |>
+  slice_min(RMSE, n = 1, with_ties = FALSE) |>
+  ungroup()
+
+response_full_horizon_winners
+
+```
+
+### Multi-Horizon Validation Interpretation
+
+The multi-horizon analysis compared four forecasting models using rolling-origin cross-validation over complete 52-week forecast windows. For life-threatening emergencies, ARIMA(1,1,1) achieved the lowest overall RMSE of 48.77 seconds, with a MAE of 32.11 seconds and MAPE of 4.97%.
+
+For non-life-threatening emergencies, ETS(A,N,N) achieved the lowest overall RMSE of 190.62 seconds, with a MAE of 121.62 seconds and MAPE of 12.47%. For non-life-threatening incidents, fixed and automatic ETS had nearly identical RMSE across the complete 52-week validation windows.
+
+The results also showed that the best-performing model varied by forecast horizon. Although ARIMA performed better in the initial one-week-ahead tuning comparisons, ETS(A,N,N) provided the lowest overall error for non-life-threatening emergencies across the complete 52-week horizon.
+
+The final model selections were based on RMSE across the complete 52-week cross-validation windows. These comparisons used an initial training window of 260 weeks and a step size of 26 weeks. The results should be interpreted as estimates of forecasting performance rather than definitive rankings.
+
 ## 4. Incident Counts and Response Times
 
 ```{r}
@@ -680,38 +931,55 @@ response_full <- bind_rows(ems_train, ems_test) |>
   select(Week, Category, Arrival_Seconds) |>
   as_tsibble(key = Category, index = Week)
 
-# Refit ETS models using all available historical data
-future_response_models <- response_full |>
+
+# Refit selected models using all available historical data
+
+# Life-threatening: ARIMA(1,1,1)
+future_life_response_models <- response_full |>
+  filter(Category == "Life-Threatening") |>
   model(
-    ETS = ETS(Arrival_Seconds)
+    ARIMA_111 = ARIMA(
+      Arrival_Seconds ~ 0 + pdq(1,1,1) + PDQ(0,0,0)
+    )
   )
 
-# Display fitted models
-future_response_models
-```
+# Non-life-threatening: ETS(A,N,N)
+future_ntl_response_models <- response_full |>
+  filter(Category == "Non-Life-Threatening") |>
+  model(
+    ETS_ANN = ETS(
+      Arrival_Seconds ~
+        error("A") + trend("N") + season("N")
+    )
+  )
 
-```{r}
-# Forecast EMS response times for the next 52 weeks
-# The first 4 weeks represent the short-term forecast
-
-future_response_fc <- future_response_models |>
+# Generate 52-week forecasts from the selected models
+future_life_response_fc <- future_life_response_models |>
   forecast(h = 52, level = c(80, 95))
 
-# Display the first 4 forecast weeks for each category
+future_ntl_response_fc <- future_ntl_response_models |>
+  forecast(h = 52, level = c(80, 95))
+
+# Combine the forecasts for both categories
+future_response_fc <- bind_rows(
+  future_life_response_fc,
+  future_ntl_response_fc
+)
+
+# Display the first four forecast weeks for each category
 future_response_fc |>
   as_tibble() |>
   group_by(Category) |>
   slice_head(n = 4) |>
   ungroup() |>
-  mutate(
-    Forecast_Minutes = .mean / 60
-  ) |>
+  mutate(Forecast_Minutes = .mean / 60) |>
   select(
     Week,
     Category,
     Forecast_Seconds = .mean,
     Forecast_Minutes
   )
+
 ```
 
 ```{r}
@@ -726,7 +994,7 @@ future_response_fc |>
   facet_wrap(~ Category, scales = "free_y") +
   labs(
     title = "NYC EMS Response-Time Forecasts: 52 Weeks Ahead",
-    subtitle = "ETS models with 80% and 95% prediction intervals",
+    subtitle = "Selected ARIMA and ETS models with 80% and 95% prediction intervals",
     x = "Week",
     y = "Average Call-to-Arrival Time (Seconds)"
   )
@@ -734,22 +1002,24 @@ future_response_fc |>
 
 ### Future Response-Time Forecast Interpretation
 
-Using all available observations through September 14, 2026, ETS models forecasted average weekly call-to-arrival times of approximately 15.53 minutes for life-threatening emergencies and 43.48 minutes for non-life-threatening emergencies. These forecasts reflect the elevated response times observed toward the end of the historical period.
+Using all available observations through September 14, 2026, the selected ARIMA(1,1,1) model forecasted an initial average call-to-arrival time of approximately 15.18 minutes for life-threatening emergencies. The forecast gradually decreased over the first several weeks before stabilizing.
 
-Both ETS models projected relatively constant response times across the 52-week horizon. However, the 80% and 95% prediction intervals widened substantially, indicating greater uncertainty over longer forecasting periods.
+For non-life-threatening emergencies, the selected ETS(A,N,N) model forecasted an average call-to-arrival time of approximately 40.63 minutes, remaining constant throughout the 52-week forecast horizon.
 
-The non-life-threatening forecast intervals extended below zero at longer horizons, which is not physically meaningful for response times. This highlights a limitation of the model's uncertainty estimates and suggests that longer-term forecasts should be interpreted cautiously.
+Both models produced widening 80% and 95% prediction intervals, indicating increasing uncertainty over longer forecasting periods. These forecasts reflect the elevated response times observed toward the end of the historical period.
 
-Overall, these forecasts could help identify potential response-time pressures for EMS planning, but they should not be treated as exact predictions. Unexpected operational changes and external disruptions could substantially affect actual response times.
+Overall, the results suggest that response-time pressures may remain substantial, particularly for non-life-threatening incidents. The forecasts can support operational planning but should not be treated as exact predictions, since staffing, dispatch operations, and unexpected events could affect actual response times.
 
 ## 6. Response-Time Results
 
-**Takeaway.** Life-threatening emergencies generally had shorter and more consistent call-to-arrival times than non-life-threatening emergencies.
+Life-threatening emergencies generally experienced shorter and more consistent response times than non-life-threatening emergencies.
 
-On the 52-week test set, ETS achieved the lowest RMSE and MAE for both emergency categories. However, manually selected ARIMA(0,1,1) achieved the lowest MAPE, with 8.37% for life-threatening emergencies and 19.02% for non-life-threatening emergencies. The manual model also outperformed automatically selected ARIMA across all three accuracy measures, demonstrating the value of comparing manual and automatic model specifications.
+In the initial 52-week test-set evaluation, automatically selected ETS achieved the lowest RMSE and MAE for both categories, while manually selected ARIMA(0,1,1) achieved slightly lower MAPE. Subsequent systematic tuning and multi-horizon cross-validation provided additional evidence for selecting different models based on the intended forecasting period.
 
-Rolling-origin cross-validation showed relatively low one-week-ahead ETS forecast errors. Residual diagnostics identified some remaining autocorrelation in the ETS models, while training-window comparisons produced mixed results.
+Across the complete 52-week cross-validation windows, ARIMA(1,1,1) achieved the lowest RMSE of 48.77 seconds for life-threatening emergencies. ETS(A,N,N) achieved the lowest RMSE of 190.62 seconds for non-life-threatening emergencies. These models were selected from the four configurations evaluated in the multi-horizon experiment.
 
-Using all available data through September 14, 2026, the refitted ETS models projected average call-to-arrival times of approximately 15.53 minutes for life-threatening emergencies and 43.48 minutes for non-life-threatening emergencies. These forecasts reflected elevated response times near the end of the historical period.
+After refitting the selected models using all available historical data through September 14, 2026, the initial forecasts were approximately 15.18 minutes for life-threatening incidents and 40.63 minutes for non-life-threatening incidents.
 
-Although these predictions could help NYC EMS anticipate potential response-time pressures, uncertainty increased considerably across the 52-week forecast horizon. The non-life-threatening prediction intervals also extended below zero, highlighting limitations in the model's uncertainty estimates. Therefore, forecasts should be interpreted cautiously and used as planning aids rather than exact predictions.
+The life-threatening forecast gradually decreased before stabilizing, while the non-life-threatening forecast remained relatively constant. Prediction intervals widened over the 52-week horizon, indicating increasing forecast uncertainty.
+
+The results highlight persistent response-time pressures, particularly for non-life-threatening incidents. These forecasts may help support EMS planning, but the uncertainty and historical variability should be considered when interpreting longer-term predictions.
